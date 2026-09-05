@@ -70,12 +70,18 @@ export function VideoRowActions({
             </Link>
           )}
 
-          {status === 'published' && (
+          {/* Anything with playable media can be cut from — publishing is not
+              required, and must not be. The whole promo workflow is: import a
+              full-length movie, cut a short promo out of it, publish only the
+              promo. Gating this on `published` would force the full movie live
+              first, which is exactly what it must never do. Matches the source
+              list on /studio/clips. */}
+          {hasMedia && (
             <Link
               href={`/studio/clips?source=${videoId}`}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-raised"
             >
-              Make a clip
+              Make a promo
             </Link>
           )}
 
