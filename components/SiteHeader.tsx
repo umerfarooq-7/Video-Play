@@ -67,10 +67,16 @@ export async function SiteHeader() {
           {isStaff && (
             <Link
               href="/admin"
-              title="Admin dashboard"
-              className="rounded-full p-2 text-muted hover:bg-surface hover:text-foreground"
+              // Labelled rather than an icon alone: moderators live in this
+              // dashboard, and a bare shield next to the avatar reads as
+              // decoration. The label collapses on narrow screens where the
+              // search field needs the room.
+              className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20"
             >
-              <Shield size={17} aria-hidden />
+              <Shield size={14} aria-hidden />
+              <span className="hidden sm:inline">
+                {profile?.role === 'admin' ? 'Admin' : 'Moderate'}
+              </span>
               <span className="sr-only">Admin dashboard</span>
             </Link>
           )}

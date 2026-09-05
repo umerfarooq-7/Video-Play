@@ -77,7 +77,64 @@ const LADDER = [
   { label: '1080p', height: 1080, videoBitrate: '5000k', audioBitrate: '192k' },
 ]
 
+// Bunny Stream. Only needed for the clip tool: uploads and URL imports go to
+// Bunny directly from the app, but cutting a promo needs ffmpeg, so the worker
+// pulls the source down, cuts it, and pushes the result back.
+const BUNNY_API = 'https://video.bunnycdn.com'
+const BUNNY_LIBRARY_ID = process.env.VIDEO_PROVIDER_LIBRARY_ID
+const BUNNY_API_KEY = process.env.VIDEO_PROVIDER_API_KEY
+const CDN_BASE = (process.env.VIDEO_CDN_BASE_URL ?? '').replace(/\/$/, '')
+// Bunny's hotlink protection rejects requests with no Referer, and ffmpeg
+// sends none by default — so every pull from the CDN has to spoof one.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
 const log = (...args) => console.log(`[${new Date().toISOString()}]`, ...args)
+
+function requireBunny() {
+  if (!BUNNY_LIBRARY_ID || !BUNNY_API_KEY || !CDN_BASE) {
+    throw new Error(
+      'Cutting from a Bunny source needs VIDEO_PROVIDER_LIBRARY_ID, ' +
+        'VIDEO_PROVIDER_API_KEY and VIDEO_CDN_BASE_URL to be set.',
+    )
+  }
+}
+
+async function bunnyCreateVideo(title) {
+  requireBunny()
+
+  const response = await fetch(`${BUNNY_API}/library/${BUNNY_LIBRARY_ID}/videos`, {
+    method: 'POST',
+    headers: { AccessKey: BUNNY_API_KEY, 'content-type': 'application/json' },
+    body: JSON.stringify({ title: String(title).slice(0, 200) }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Bunny createVideo failed: ${response.status} ${await response.text()}`)
+  }
+
+  const { guid } = await response.json()
+  if (!guid) throw new Error('Bunny createVideo returned no guid.')
+  return guid
+}
+
+async function bunnyUpload(guid, filePath) {
+  requireBunny()
+
+  const { size } = await stat(filePath)
+
+  // Streamed rather than buffered: a ten-minute promo can be hundreds of
+  // megabytes, and reading it into memory would be wasteful on a small worker.
+  const response = await fetch(`${BUNNY_API}/library/${BUNNY_LIBRARY_ID}/videos/${guid}`, {
+    method: 'PUT',
+    headers: { AccessKey: BUNNY_API_KEY, 'content-length': String(size) },
+    body: Readable.toWeb(createReadStream(filePath)),
+    duplex: 'half',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Bunny upload failed: ${response.status} ${await response.text()}`)
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Binary resolution
@@ -407,25 +464,39 @@ async function processJob(job) {
     input = join(MEDIA_ROOT, job.source_path)
     await stat(input) // throws with a clear ENOENT if the upload vanished
   } else if (job.kind === 'clip') {
-    // Cut from the source video's original file, not its HLS output — the
-    // mezzanine is higher quality and seeks frame-accurately.
     const { data: source } = await supabase
       .from('videos')
-      .select('id, provider_asset_id')
+      .select('id, provider, provider_asset_id, playback_hls_path')
       .eq('id', job.clip_source_id)
       .single()
 
     if (!source?.provider_asset_id) {
-      throw new Error('The source video has no original file to cut from.')
+      throw new Error('The source video has no media to cut from.')
     }
 
-    const sourceInput = join(MEDIA_ROOT, source.provider_asset_id)
     input = join(workDir, 'clip-input.mp4')
+    const preArgs = ['-y']
+    let sourceInput
+
+    if (source.provider === 'bunny') {
+      // Nothing is on local disk — pull the section straight off the CDN.
+      // ffmpeg reads HLS natively, so only the part of the movie inside the
+      // cut window gets downloaded, not the whole file.
+      requireBunny()
+      sourceInput = `${CDN_BASE}/${source.playback_hls_path ?? `${source.provider_asset_id}/playlist.m3u8`}`
+      preArgs.push('-headers', `Referer: ${SITE_URL}/\r\n`)
+      log(`cutting from Bunny source ${sourceInput}`)
+    } else {
+      // Local: cut from the original upload rather than the HLS renditions —
+      // the mezzanine is higher quality and seeks frame-accurately.
+      sourceInput = join(MEDIA_ROOT, source.provider_asset_id)
+      await stat(sourceInput)
+    }
 
     await run(FFMPEG, [
-      '-y',
-      // -ss before -i seeks by keyframe (fast); re-encoding below makes the
-      // cut frame-accurate anyway.
+      ...preArgs,
+      // -ss before -i seeks by keyframe (fast, and over HLS it skips whole
+      // segments); re-encoding below makes the cut frame-accurate anyway.
       '-ss', String(job.clip_start_seconds),
       '-to', String(job.clip_end_seconds),
       '-i', sourceInput,
@@ -441,6 +512,51 @@ async function processJob(job) {
   log(`probed: ${meta.width}x${meta.height}, ${meta.durationSeconds}s`)
 
   await setProgress(job.id, 35)
+
+  // Where does the finished file belong? The output video inherits its
+  // provider from the source, so a promo cut from a Bunny movie goes back to
+  // Bunny rather than into the local HLS pipeline below.
+  const { data: outputVideo } = await supabase
+    .from('videos')
+    .select('provider, title')
+    .eq('id', job.video_id)
+    .single()
+
+  if (outputVideo?.provider === 'bunny') {
+    log('uploading cut to Bunny')
+
+    const guid = await bunnyCreateVideo(outputVideo.title ?? 'Promo')
+
+    // Record the guid before uploading: Bunny's webhook looks the video up by
+    // provider_asset_id, and on a fast encode the callback can arrive before
+    // the upload call has even returned.
+    await supabase
+      .from('videos')
+      .update({ provider_asset_id: guid, status: 'processing' })
+      .eq('id', job.video_id)
+
+    await bunnyUpload(guid, input)
+    await setProgress(job.id, 100)
+
+    // Deliberately NOT set to pending_review here — Bunny still has to encode
+    // it, and its webhook is what moves it on with the real duration and
+    // thumbnail. Marking it ready now would publish a video that cannot play.
+    await supabase
+      .from('ingest_jobs')
+      .update({
+        status: 'succeeded',
+        progress: 100,
+        finished_at: new Date().toISOString(),
+        locked_by: null,
+      })
+      .eq('id', job.id)
+
+    // The local cut is only a staging file; Bunny holds the master now.
+    await rm(input, { force: true })
+
+    log(`finished job ${job.id} (handed to Bunny as ${guid})`)
+    return
+  }
 
   const hlsDir = join(workDir, 'hls')
   const rungs = await buildHls(input, hlsDir, meta, (p) =>
