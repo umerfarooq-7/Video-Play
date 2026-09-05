@@ -18,6 +18,8 @@ export interface VideoCardData {
   projection: VideoProjection
   publishedAt: string | null
   uploader: { username: string; displayName: string | null } | null
+  /** Source network. Shown in place of the uploader when known. */
+  paysite: { name: string; domain: string } | null
   /** Animated preview shown while the pointer is over the card. */
   previewUrl: string | null
 }
@@ -41,7 +43,8 @@ const SELECT = `
   id, slug, title, duration_seconds, thumbnail_path, view_count,
   like_count, dislike_count, projection, published_at, allowed_countries,
   blocked_countries, provider, preview_clip_path,
-  owner:profiles!videos_owner_id_fkey ( username, display_name )
+  owner:profiles!videos_owner_id_fkey ( username, display_name ),
+  paysite:paysites!videos_paysite_id_fkey ( name, domain )
 `
 
 type Row = Pick<
@@ -62,6 +65,7 @@ type Row = Pick<
   | 'preview_clip_path'
 > & {
   owner: { username: string; display_name: string | null } | null
+  paysite: { name: string; domain: string } | null
 }
 
 function toCardData(row: Row): VideoCardData {
@@ -81,6 +85,9 @@ function toCardData(row: Row): VideoCardData {
     dislikeCount: row.dislike_count,
     projection: row.projection,
     publishedAt: row.published_at,
+    paysite: row.paysite
+      ? { name: row.paysite.name, domain: row.paysite.domain }
+      : null,
     uploader: row.owner
       ? { username: row.owner.username, displayName: row.owner.display_name }
       : null,

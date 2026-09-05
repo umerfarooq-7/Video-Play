@@ -10,6 +10,7 @@ import { COUNTRY_HEADER } from '@/lib/constants'
 import { formatCount, formatRelativeTime, ratingPercent } from '@/lib/format'
 import { Player } from '@/components/player/Player'
 import { VideoGrid } from '@/components/VideoCard'
+import { EntityAvatar } from '@/components/BrowseResults'
 import { WatchActions } from './WatchActions'
 import { ViewCounter } from './ViewCounter'
 import type { Video, VideoProjection } from '@/types/database'
@@ -23,6 +24,20 @@ type WatchRow = Video & {
   } | null
   video_categories: { categories: { id: string; slug: string; name: string } | null }[]
   video_tags: { tags: { id: string; slug: string; name: string } | null }[]
+  video_models: {
+    models: {
+      id: string
+      slug: string
+      name: string
+      avatar_url: string | null
+    } | null
+  }[]
+  paysite: {
+    id: string
+    name: string
+    domain: string
+    logo_url: string | null
+  } | null
 }
 
 async function loadVideo(slug: string) {
@@ -34,8 +49,10 @@ async function loadVideo(slug: string) {
       `
       *,
       owner:profiles!videos_owner_id_fkey ( id, username, display_name, avatar_url ),
+      paysite:paysites!videos_paysite_id_fkey ( id, name, domain, logo_url ),
       video_categories ( categories ( id, slug, name ) ),
-      video_tags ( tags ( id, slug, name ) )
+      video_tags ( tags ( id, slug, name ) ),
+      video_models ( models ( id, slug, name, avatar_url ) )
     `,
     )
     .eq('slug', slug)
@@ -126,6 +143,9 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
   const tags = video.video_tags
     .map((link) => link.tags)
     .filter((t): t is NonNullable<typeof t> => !!t)
+  const models = (video.video_models ?? [])
+    .map((link) => link.models)
+    .filter((m): m is NonNullable<typeof m> => !!m)
 
   // Related: same first category where possible, else recent.
   const { videos: related } = await listVideos({
@@ -209,19 +229,70 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
           )}
         </div>
 
-        {video.owner && (
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-raised text-sm font-bold uppercase">
-              {(video.owner.display_name ?? video.owner.username).charAt(0)}
+        {/* Attribution. The source network leads, because that is who actually
+            produced the video and who a takedown would come from. The uploader
+            is credited only when there is no network, so a member is never
+            shown as the apparent producer of a studio's work. */}
+        {video.paysite ? (
+          <Link
+            href={`/paysite/${video.paysite.domain}`}
+            className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3 hover:border-accent"
+          >
+            <EntityAvatar
+              src={video.paysite.logo_url}
+              name={video.paysite.name}
+              size="sm"
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">
+                {video.paysite.name}
+              </span>
+              <span className="text-xs text-muted">{video.paysite.domain}</span>
             </span>
-            <div className="min-w-0">
-              <Link
-                href={`/u/${video.owner.username}`}
-                className="block truncate text-sm font-semibold hover:text-accent"
-              >
-                {video.owner.display_name ?? video.owner.username}
-              </Link>
-              <p className="text-xs text-muted">@{video.owner.username}</p>
+          </Link>
+        ) : (
+          video.owner && (
+            <Link
+              href={`/u/${video.owner.username}`}
+              className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3 hover:border-accent"
+            >
+              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-surface-raised text-sm font-bold uppercase">
+                {(video.owner.display_name ?? video.owner.username).charAt(0)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">
+                  {video.owner.display_name ?? video.owner.username}
+                </span>
+                <span className="text-xs text-muted">
+                  @{video.owner.username}
+                </span>
+              </span>
+            </Link>
+          )
+        )}
+
+        {models.length > 0 && (
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              Models
+            </h2>
+            <div className="flex flex-wrap gap-3">
+              {models.map((model) => (
+                <Link
+                  key={model.id}
+                  href={`/model/${model.slug}`}
+                  className="group flex items-center gap-2 rounded-full border border-border py-1 pl-1 pr-3 hover:border-accent"
+                >
+                  <EntityAvatar
+                    src={model.avatar_url}
+                    name={model.name}
+                    size="xs"
+                  />
+                  <span className="whitespace-nowrap text-xs font-medium group-hover:text-accent">
+                    {model.name}
+                  </span>
+                </Link>
+              ))}
             </div>
           </div>
         )}

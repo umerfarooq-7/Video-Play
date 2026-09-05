@@ -69,13 +69,26 @@ export function VideoCard({ video, priority = false }: Props) {
         {video.publishedAt && <span>{formatRelativeTime(video.publishedAt)}</span>}
       </div>
 
-      {video.uploader && (
+      {/* Attribution line. The source network is what a viewer actually cares
+          about and what the rightsholder expects to see credited, so it wins.
+          The uploader is only shown when there is no network on the video —
+          otherwise the credit would read as if our member produced it. */}
+      {video.paysite ? (
         <Link
-          href={`/u/${video.uploader.username}`}
-          className="mt-0.5 block truncate text-xs text-muted hover:text-accent"
+          href={`/paysite/${video.paysite.domain}`}
+          className="mt-0.5 block truncate text-xs font-medium text-muted hover:text-accent"
         >
-          {video.uploader.displayName ?? video.uploader.username}
+          {video.paysite.name}
         </Link>
+      ) : (
+        video.uploader && (
+          <Link
+            href={`/u/${video.uploader.username}`}
+            className="mt-0.5 block truncate text-xs text-muted hover:text-accent"
+          >
+            {video.uploader.displayName ?? video.uploader.username}
+          </Link>
+        )
       )}
     </article>
   )
