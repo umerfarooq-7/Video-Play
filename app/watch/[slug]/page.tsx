@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { headers } from 'next/headers'
-import { Eye, Calendar, Globe } from 'lucide-react'
+import { Eye, Calendar, Globe, Download } from 'lucide-react'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { getProviderFor } from '@/lib/video/provider'
 import { listVideos } from '@/lib/queries'
@@ -187,12 +187,27 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
           </div>
         </div>
 
-        <WatchActions
-          videoId={video.id}
-          likeCount={video.like_count}
-          dislikeCount={video.dislike_count}
-          signedIn={!!user}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <WatchActions
+            videoId={video.id}
+            likeCount={video.like_count}
+            dislikeCount={video.dislike_count}
+            signedIn={!!user}
+          />
+
+          {isPublished && video.downloads_enabled && video.download_path && (
+            // Points at our own route, not the CDN: that keeps the geo and
+            // per-video rules enforceable and keeps the storage URL out of the
+            // page source.
+            <a
+              href={`/api/download/${video.slug}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium hover:border-accent hover:text-accent"
+            >
+              <Download size={14} aria-hidden />
+              Download
+            </a>
+          )}
+        </div>
 
         {video.owner && (
           <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
@@ -233,7 +248,7 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
             {tags.map((tag) => (
               <Link
                 key={tag.id}
-                href={`/search?q=${encodeURIComponent(tag.name)}`}
+                href={`/tag/${tag.slug}`}
                 className="rounded-full border border-border px-2.5 py-1 text-xs text-muted hover:text-accent"
               >
                 #{tag.name}

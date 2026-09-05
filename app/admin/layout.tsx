@@ -1,5 +1,13 @@
 import Link from 'next/link'
-import { Users, ShieldCheck, Flag, LayoutDashboard, FolderTree } from 'lucide-react'
+import {
+  Users,
+  ShieldCheck,
+  Flag,
+  LayoutDashboard,
+  FolderTree,
+  Globe,
+  UserRound,
+} from 'lucide-react'
 import { requireStaff } from '@/lib/auth/guards'
 
 export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
@@ -14,6 +22,8 @@ export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
     { href: '/admin/reports', label: 'Reports', icon: Flag, adminOnly: false },
     { href: '/admin/uploaders', label: 'Uploader applications', icon: Users, adminOnly: true },
     { href: '/admin/categories', label: 'Categories', icon: FolderTree, adminOnly: true },
+    { href: '/admin/paysites', label: 'Networks', icon: Globe, adminOnly: true },
+    { href: '/admin/models', label: 'Models', icon: UserRound, adminOnly: true },
   ].filter((link) => !link.adminOnly || isAdmin)
 
   return (

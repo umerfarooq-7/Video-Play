@@ -1,11 +1,10 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import { Eye, ThumbsUp, Glasses } from 'lucide-react'
+import { VideoThumb } from '@/components/VideoThumb'
 import {
   formatCount,
   formatDuration,
   formatRelativeTime,
-  isRemoteAsset,
   ratingPercent,
 } from '@/lib/format'
 import type { VideoCardData } from '@/lib/queries'
@@ -27,23 +26,15 @@ export function VideoCard({ video, priority = false }: Props) {
         className="block focus-visible:outline-2 focus-visible:outline-accent rounded-lg"
       >
         <div className="relative aspect-video overflow-hidden rounded-lg bg-surface">
-          {video.thumbnailUrl ? (
-            <Image
-              src={video.thumbnailUrl}
-              alt=""
-              fill
-              priority={priority}
-              unoptimized={isRemoteAsset(video.thumbnailUrl)}
-              // Matches the grid breakpoints below, so the browser does not
-              // download a 1280px thumbnail to paint it at 300px on mobile.
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1536px) 25vw, 16vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted text-xs">
-              Processing…
-            </div>
-          )}
+          <VideoThumb
+            thumbnailUrl={video.thumbnailUrl}
+            previewUrl={video.previewUrl}
+            alt=""
+            priority={priority}
+            // Matches the grid breakpoints below, so the browser does not
+            // download a 1280px thumbnail to paint it at 300px on mobile.
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1536px) 25vw, 16vw"
+          />
 
           <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
             {formatDuration(video.durationSeconds)}

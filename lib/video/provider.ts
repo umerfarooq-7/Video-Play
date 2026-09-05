@@ -425,6 +425,26 @@ export function getBunnyProvider(): BunnyProvider {
 export const bunnyPaths = {
   playlist: (guid: string) => `${guid}/playlist.m3u8`,
   thumbnail: (guid: string, fileName = 'thumbnail.jpg') => `${guid}/${fileName}`,
+  /**
+   * Animated hover preview. Bunny generates this during encoding, so the
+   * "short clip on hover" the client asked for needs no cutting of our own.
+   */
+  preview: (guid: string) => `${guid}/preview.webp`,
+  /** The source file Bunny retains, used for direct downloads. */
+  original: (guid: string) => `${guid}/original`,
+}
+
+/**
+ * Resolve any stored media path against the owning provider's public base.
+ *
+ * Thin wrapper over the provider's URL resolution, for callers that hold a
+ * path and a provider name but have no reason to care which driver is which.
+ */
+export function publicAssetUrl(
+  providerName: string | null | undefined,
+  path: string | null,
+): string | null {
+  return getProviderFor(providerName).getThumbnailUrl(path)
 }
 
 /** Projections the VR/360 renderer handles, as opposed to the flat player. */

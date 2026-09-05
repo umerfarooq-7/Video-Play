@@ -27,7 +27,7 @@ export default async function TagsPage() {
           {tags.map((tag) => (
             <Link
               key={tag.id}
-              href={`/search?q=${encodeURIComponent(tag.name)}`}
+              href={`/tag/${tag.slug}`}
               className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent"
             >
               {tag.name}

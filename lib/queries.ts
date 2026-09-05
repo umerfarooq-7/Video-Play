@@ -18,6 +18,8 @@ export interface VideoCardData {
   projection: VideoProjection
   publishedAt: string | null
   uploader: { username: string; displayName: string | null } | null
+  /** Animated preview shown while the pointer is over the card. */
+  previewUrl: string | null
 }
 
 export interface VideoQuery {
@@ -38,7 +40,7 @@ export interface VideoQuery {
 const SELECT = `
   id, slug, title, duration_seconds, thumbnail_path, view_count,
   like_count, dislike_count, projection, published_at, allowed_countries,
-  blocked_countries, provider,
+  blocked_countries, provider, preview_clip_path,
   owner:profiles!videos_owner_id_fkey ( username, display_name )
 `
 
@@ -57,6 +59,7 @@ type Row = Pick<
   | 'allowed_countries'
   | 'blocked_countries'
   | 'provider'
+  | 'preview_clip_path'
 > & {
   owner: { username: string; display_name: string | null } | null
 }
@@ -72,6 +75,7 @@ function toCardData(row: Row): VideoCardData {
     title: row.title,
     durationSeconds: row.duration_seconds,
     thumbnailUrl: provider.getThumbnailUrl(row.thumbnail_path),
+    previewUrl: provider.getThumbnailUrl(row.preview_clip_path),
     viewCount: row.view_count,
     likeCount: row.like_count,
     dislikeCount: row.dislike_count,
@@ -229,6 +233,182 @@ export async function getCategories() {
     .select('*')
     .eq('is_active', true)
     .order('sort_order')
+
+  return data ?? []
+}
+
+/**
+ * Videos linked to a set of ids, paged.
+ *
+ * Shared by the model / paysite / tag browse pages. They all resolve to "these
+ * video ids", so the geo filtering, ordering and paging live in one place
+ * rather than being copied three times.
+ */
+async function listVideosByIds(
+  ids: string[],
+  query: { page?: number; perPage?: number; country?: string | null } = {},
+) {
+  const page = Math.max(1, query.page ?? 1)
+  const perPage = Math.min(60, Math.max(1, query.perPage ?? 24))
+
+  if (ids.length === 0) return { videos: [], total: 0, page, perPage }
+
+  const supabase = await createClient()
+
+  let builder = supabase
+    .from('videos')
+    .select(SELECT, { count: 'exact' })
+    .eq('status', 'published')
+    .in('id', ids)
+
+  if (query.country) {
+    const code = query.country.toUpperCase()
+    builder = builder
+      .not('blocked_countries', 'cs', `{${code}}`)
+      .or(`allowed_countries.eq.{},allowed_countries.cs.{${code}}`)
+  }
+
+  const { data, count, error } = await builder
+    .order('published_at', { ascending: false })
+    .range((page - 1) * perPage, page * perPage - 1)
+
+  if (error) throw new Error(`listVideosByIds failed: ${error.message}`)
+
+  return {
+    videos: ((data ?? []) as unknown as Row[]).map(toCardData),
+    total: count ?? 0,
+    page,
+    perPage,
+  }
+}
+
+/** Everything a given performer appears in. */
+export async function listVideosByModel(
+  slug: string,
+  query: { page?: number; perPage?: number; country?: string | null } = {},
+) {
+  const supabase = await createClient()
+
+  const { data: model } = await supabase
+    .from('models')
+    .select('*')
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (!model) return { model: null, videos: [], total: 0, page: 1, perPage: 24 }
+
+  const { data: links } = await supabase
+    .from('video_models')
+    .select('video_id')
+    .eq('model_id', model.id)
+
+  const result = await listVideosByIds(
+    (links ?? []).map((l) => l.video_id),
+    query,
+  )
+
+  return { model, ...result }
+}
+
+/** Everything sourced from a given paysite. */
+export async function listVideosByPaysite(
+  domain: string,
+  query: { page?: number; perPage?: number; country?: string | null } = {},
+) {
+  const supabase = await createClient()
+
+  const { data: paysite } = await supabase
+    .from('paysites')
+    .select('*')
+    .eq('domain', domain)
+    .maybeSingle()
+
+  if (!paysite) return { paysite: null, videos: [], total: 0, page: 1, perPage: 24 }
+
+  // paysite_id is a column on videos, so this needs no join table.
+  const page = Math.max(1, query.page ?? 1)
+  const perPage = Math.min(60, Math.max(1, query.perPage ?? 24))
+
+  let builder = supabase
+    .from('videos')
+    .select(SELECT, { count: 'exact' })
+    .eq('status', 'published')
+    .eq('paysite_id', paysite.id)
+
+  if (query.country) {
+    const code = query.country.toUpperCase()
+    builder = builder
+      .not('blocked_countries', 'cs', `{${code}}`)
+      .or(`allowed_countries.eq.{},allowed_countries.cs.{${code}}`)
+  }
+
+  const { data, count, error } = await builder
+    .order('published_at', { ascending: false })
+    .range((page - 1) * perPage, page * perPage - 1)
+
+  if (error) throw new Error(`listVideosByPaysite failed: ${error.message}`)
+
+  return {
+    paysite,
+    videos: ((data ?? []) as unknown as Row[]).map(toCardData),
+    total: count ?? 0,
+    page,
+    perPage,
+  }
+}
+
+/** Everything carrying a given tag. */
+export async function listVideosByTag(
+  slug: string,
+  query: { page?: number; perPage?: number; country?: string | null } = {},
+) {
+  const supabase = await createClient()
+
+  const { data: tag } = await supabase
+    .from('tags')
+    .select('*')
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (!tag) return { tag: null, videos: [], total: 0, page: 1, perPage: 24 }
+
+  const { data: links } = await supabase
+    .from('video_tags')
+    .select('video_id')
+    .eq('tag_id', tag.id)
+
+  const result = await listVideosByIds(
+    (links ?? []).map((l) => l.video_id),
+    query,
+  )
+
+  return { tag, ...result }
+}
+
+/** Models for the home page rail. Featured first, then most prolific. */
+export async function getFeaturedModels(limit = 18) {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('models')
+    .select('*')
+    .gt('video_count', 0)
+    .order('is_featured', { ascending: false })
+    .order('video_count', { ascending: false })
+    .limit(limit)
+
+  return data ?? []
+}
+
+/** Paysites for the home page rail. Featured first, then most prolific. */
+export async function getFeaturedPaysites(limit = 18) {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('paysites')
+    .select('*')
+    .gt('video_count', 0)
+    .order('is_featured', { ascending: false })
+    .order('video_count', { ascending: false })
+    .limit(limit)
 
   return data ?? []
 }

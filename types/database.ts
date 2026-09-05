@@ -62,6 +62,9 @@ export type Paysite = {
   is_approved: boolean
   created_by: string | null
   created_at: string
+  site_url: string | null
+  is_featured: boolean
+  video_count: number
 }
 
 export type Model = {
@@ -73,6 +76,7 @@ export type Model = {
   is_approved: boolean
   created_by: string | null
   video_count: number
+  is_featured: boolean
   created_at: string
 }
 
@@ -151,6 +155,13 @@ export type Video = {
   full_duration_seconds: number | null
   /** A full-length source kept only so promos can be cut from it. Never published. */
   is_source_only: boolean
+
+  // --- Discovery / delivery (migration 0006) ---
+  /** Short looping animation for grid hover. Bunny's preview.webp. */
+  preview_clip_path: string | null
+  /** Directly downloadable file, when the provider exposes one. */
+  download_path: string | null
+  downloads_enabled: boolean
 }
 
 export type UploaderApplication = {

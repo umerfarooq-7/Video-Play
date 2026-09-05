@@ -133,6 +133,10 @@ export async function POST(request: NextRequest) {
         guid,
         details.thumbnailFileName ?? 'thumbnail.jpg',
       ),
+      // Bunny produces both of these during encoding, so grid hover previews
+      // and direct downloads need no extra processing on our side.
+      preview_clip_path: bunnyPaths.preview(guid),
+      download_path: bunnyPaths.original(guid),
     })
     .eq('id', video.id)
 
