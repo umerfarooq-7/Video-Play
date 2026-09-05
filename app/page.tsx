@@ -37,25 +37,11 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-10">
-      <section>
-        <SectionHeading
-          title="Trending now"
-          href="/search?sort=views"
-          subtitle={
-            regionConfig.region === 'INT'
-              ? undefined
-              : `Popular in ${regionConfig.label}`
-          }
-        />
-        <VideoGrid
-          videos={trending.videos}
-          emptyMessage="Nothing published yet. Approve an uploader and publish a video to fill this grid."
-        />
-      </section>
-
-      {/* Discovery rails. These only appear once there is something behind
-          them — an empty "Models" strip on a new site looks broken rather than
-          new. */}
+      {/* Discovery first.
+          These sit above the video grids on purpose: the point of the home
+          page is to let someone find a performer, network or tag they care
+          about, not to scroll a wall of thumbnails. A section is hidden only
+          when it is genuinely empty, so a new site does not show bare strips. */}
       {models.length > 0 && (
         <section>
           <SectionHeading title="Models" href="/models" />
@@ -142,6 +128,22 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <section>
+        <SectionHeading
+          title="Trending now"
+          href="/search?sort=views"
+          subtitle={
+            regionConfig.region === 'INT'
+              ? undefined
+              : `Popular in ${regionConfig.label}`
+          }
+        />
+        <VideoGrid
+          videos={trending.videos}
+          emptyMessage="Nothing published yet. Approve an uploader and publish a video to fill this grid."
+        />
+      </section>
 
       <section>
         <SectionHeading title="Recently added" href="/search?sort=new" />

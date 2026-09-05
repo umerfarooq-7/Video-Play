@@ -385,13 +385,20 @@ export async function listVideosByTag(
   return { tag, ...result }
 }
 
-/** Models for the home page rail. Featured first, then most prolific. */
+/**
+ * Models for the home page rail.
+ *
+ * Featured entries appear even with no videos yet: an admin ticking "feature
+ * on the home page" is an explicit instruction to show it, and a brand new
+ * site has nothing published to count. Everything else has to have earned its
+ * place by actually appearing in something.
+ */
 export async function getFeaturedModels(limit = 18) {
   const supabase = await createClient()
   const { data } = await supabase
     .from('models')
     .select('*')
-    .gt('video_count', 0)
+    .or('is_featured.eq.true,video_count.gt.0')
     .order('is_featured', { ascending: false })
     .order('video_count', { ascending: false })
     .limit(limit)
@@ -399,13 +406,13 @@ export async function getFeaturedModels(limit = 18) {
   return data ?? []
 }
 
-/** Paysites for the home page rail. Featured first, then most prolific. */
+/** Paysites for the home page rail. Same rule as models. */
 export async function getFeaturedPaysites(limit = 18) {
   const supabase = await createClient()
   const { data } = await supabase
     .from('paysites')
     .select('*')
-    .gt('video_count', 0)
+    .or('is_featured.eq.true,video_count.gt.0')
     .order('is_featured', { ascending: false })
     .order('video_count', { ascending: false })
     .limit(limit)
