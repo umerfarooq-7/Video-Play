@@ -69,10 +69,20 @@ export function EntityAvatar({
 }: {
   src: string | null
   name: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
 }) {
-  const dimension = { sm: 'size-12', md: 'size-16', lg: 'size-20' }[size]
-  const text = { sm: 'text-base', md: 'text-xl', lg: 'text-2xl' }[size]
+  const dimension = {
+    xs: 'size-7',
+    sm: 'size-12',
+    md: 'size-16',
+    lg: 'size-20',
+  }[size]
+  const text = {
+    xs: 'text-[10px]',
+    sm: 'text-base',
+    md: 'text-xl',
+    lg: 'text-2xl',
+  }[size]
 
   if (src) {
     return (

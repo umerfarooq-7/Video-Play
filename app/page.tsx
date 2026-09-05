@@ -3,7 +3,6 @@ import { headers } from 'next/headers'
 import { ChevronRight } from 'lucide-react'
 import {
   listVideos,
-  getCategories,
   getFeaturedModels,
   getFeaturedPaysites,
   getPopularTags,
@@ -26,107 +25,71 @@ export default async function HomePage() {
   const region = isRegion(regionHeader) ? regionHeader : 'INT'
   const regionConfig = REGION_CONFIG[region]
 
-  const [trending, latest, categories, models, paysites, tags] = await Promise.all([
+  const [trending, latest, models, paysites, tags] = await Promise.all([
     listVideos({ sort: 'views', perPage: 12, country }),
     listVideos({ sort: 'new', perPage: 24, country }),
-    getCategories(),
-    getFeaturedModels(18),
-    getFeaturedPaysites(18),
-    getPopularTags(40),
+    getFeaturedModels(24),
+    getFeaturedPaysites(24),
+    getPopularTags(30),
   ])
 
   return (
-    <div className="space-y-10">
-      {/* Discovery first.
-          These sit above the video grids on purpose: the point of the home
-          page is to let someone find a performer, network or tag they care
-          about, not to scroll a wall of thumbnails. A section is hidden only
-          when it is genuinely empty, so a new site does not show bare strips. */}
+    <div className="space-y-6">
+      {/*
+        Discovery strips: models, networks, tags.
+
+        Deliberately compact and unlabelled. Each is visually self-explanatory
+        — faces, logos, hash-prefixed words — and a heading above each one
+        pushed the first video card most of a screen further down. Categories
+        are not repeated here; they already have their own rail in the header,
+        and duplicating them cost a whole section for no new information.
+      */}
       {models.length > 0 && (
-        <section>
-          <SectionHeading title="Models" href="/models" />
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
-            {models.map((model) => (
-              <Link
-                key={model.id}
-                href={`/model/${model.slug}`}
-                className="group flex w-20 shrink-0 flex-col items-center gap-1.5 text-center"
-              >
-                <EntityAvatar src={model.avatar_url} name={model.name} size="md" />
-                <span className="line-clamp-2 text-xs font-medium leading-tight text-muted group-hover:text-accent">
-                  {model.name}
-                </span>
-                <span className="text-[10px] text-muted">
-                  {model.video_count}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
+        <Rail seeAllHref="/models" label="Models">
+          {models.map((model) => (
+            <Link
+              key={model.id}
+              href={`/model/${model.slug}`}
+              className="group flex w-16 shrink-0 flex-col items-center gap-1 text-center"
+            >
+              <EntityAvatar src={model.avatar_url} name={model.name} size="sm" />
+              <span className="line-clamp-1 w-full text-[11px] font-medium leading-tight text-muted group-hover:text-accent">
+                {model.name}
+              </span>
+            </Link>
+          ))}
+        </Rail>
       )}
 
       {paysites.length > 0 && (
-        <section>
-          <SectionHeading title="Networks" href="/networks" />
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-            {paysites.map((paysite) => (
-              <Link
-                key={paysite.id}
-                href={`/paysite/${paysite.domain}`}
-                className="group flex w-36 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-2.5 hover:border-accent"
-              >
-                <EntityAvatar src={paysite.logo_url} name={paysite.name} size="sm" />
-                <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold group-hover:text-accent">
-                    {paysite.name}
-                  </span>
-                  <span className="text-[10px] text-muted">
-                    {paysite.video_count} video{paysite.video_count === 1 ? '' : 's'}
-                  </span>
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
+        <Rail seeAllHref="/networks" label="Networks">
+          {paysites.map((paysite) => (
+            <Link
+              key={paysite.id}
+              href={`/paysite/${paysite.domain}`}
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1 pr-3 hover:border-accent"
+            >
+              <EntityAvatar src={paysite.logo_url} name={paysite.name} size="xs" />
+              <span className="whitespace-nowrap text-xs font-medium group-hover:text-accent">
+                {paysite.name}
+              </span>
+            </Link>
+          ))}
+        </Rail>
       )}
 
       {tags.length > 0 && (
-        <section>
-          <SectionHeading title="Popular tags" href="/tags" />
-          <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <Link
-                key={tag.id}
-                href={`/tag/${tag.slug}`}
-                className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent"
-              >
-                {tag.name}
-                {tag.usage_count > 0 && (
-                  <span className="ml-1.5 text-[10px] opacity-70">
-                    {tag.usage_count}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {categories.length > 0 && (
-        <section>
-          <SectionHeading title="Categories" href="/categories" />
-          <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/category/${category.slug}`}
-                className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent"
-              >
-                {category.name}
-              </Link>
-            ))}
-          </div>
-        </section>
+        <Rail seeAllHref="/tags" label="Tags">
+          {tags.map((tag) => (
+            <Link
+              key={tag.id}
+              href={`/tag/${tag.slug}`}
+              className="shrink-0 whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted hover:border-accent hover:text-accent"
+            >
+              {tag.name}
+            </Link>
+          ))}
+        </Rail>
       )}
 
       <section>
@@ -153,6 +116,36 @@ export default async function HomePage() {
   )
 }
 
+/**
+ * One horizontally scrolling strip.
+ *
+ * `label` is not rendered visually — it exists so screen readers still get a
+ * name for the region, which a row of bare links would otherwise lack.
+ */
+function Rail({
+  label,
+  seeAllHref,
+  children,
+}: {
+  label: string
+  seeAllHref: string
+  children: React.ReactNode
+}) {
+  return (
+    <nav aria-label={label} className="flex items-center gap-3">
+      <div className="flex flex-1 items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
+        {children}
+      </div>
+      <Link
+        href={seeAllHref}
+        className="shrink-0 self-center text-xs font-medium text-accent hover:underline"
+      >
+        All
+      </Link>
+    </nav>
+  )
+}
+
 function SectionHeading({
   title,
   subtitle,
@@ -163,7 +156,7 @@ function SectionHeading({
   href: string
 }) {
   return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
+    <div className="mb-2.5 flex items-baseline justify-between gap-3">
       <div>
         <h2 className="text-base font-semibold">{title}</h2>
         {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
