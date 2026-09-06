@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createClient } from '@/lib/supabase/server'
-import { getProviderFor } from '@/lib/video/provider'
+import { getProviderFor, bunnyPaths } from '@/lib/video/provider'
 import type { Video, VideoProjection } from '@/types/database'
 
 export type SortOption = 'new' | 'views' | 'rating' | 'duration' | 'relevance'
@@ -42,7 +42,7 @@ export interface VideoQuery {
 const SELECT = `
   id, slug, title, duration_seconds, thumbnail_path, view_count,
   like_count, dislike_count, projection, published_at, allowed_countries,
-  blocked_countries, provider, preview_clip_path,
+  blocked_countries, provider, provider_asset_id, preview_clip_path,
   owner:profiles!videos_owner_id_fkey ( username, display_name ),
   paysite:paysites!videos_paysite_id_fkey ( name, domain )
 `
@@ -63,6 +63,7 @@ type Row = Pick<
   | 'blocked_countries'
   | 'provider'
   | 'preview_clip_path'
+  | 'provider_asset_id'
 > & {
   owner: { username: string; display_name: string | null } | null
   paysite: { name: string; domain: string } | null
@@ -79,7 +80,19 @@ function toCardData(row: Row): VideoCardData {
     title: row.title,
     durationSeconds: row.duration_seconds,
     thumbnailUrl: provider.getThumbnailUrl(row.thumbnail_path),
-    previewUrl: provider.getThumbnailUrl(row.preview_clip_path),
+    // Fall back to deriving the preview path when the column is empty.
+    //
+    // Bunny always generates preview.webp during encoding, but the column is
+    // only filled by the webhook — so a video that was published before the
+    // column existed, or completed while the webhook was misconfigured, would
+    // have no hover preview forever. Deriving it here makes that self-healing
+    // instead of needing a backfill every time.
+    previewUrl: provider.getThumbnailUrl(
+      row.preview_clip_path ??
+        (row.provider === 'bunny' && row.provider_asset_id
+          ? bunnyPaths.preview(row.provider_asset_id)
+          : null),
+    ),
     viewCount: row.view_count,
     likeCount: row.like_count,
     dislikeCount: row.dislike_count,
