@@ -1,22 +1,29 @@
 @import "tailwindcss";
 
 /*
- * Dark-first palette. Video thumbnails carry all the colour in a grid like
- * this, so the chrome stays near-neutral and lets them do the work.
+ * Light palette with a blue accent.
+ *
+ * Every colour is a variable and nothing hardcodes a hex outside this block,
+ * so the whole site can be re-themed from here — that is what made switching
+ * from the previous dark scheme a ten-line change rather than a rewrite.
+ *
+ * Contrast note: --muted is deliberately dark enough to clear WCAG AA on
+ * --background for body text. The obvious lighter grey looks tidier in a
+ * mockup and becomes unreadable on a phone outdoors.
  */
 :root {
-  --background: #0b0b0e;
-  --surface: #141419;
-  --surface-raised: #1c1c23;
-  --border: #2a2a33;
-  --foreground: #f2f2f5;
-  --muted: #9a9aa8;
-  --accent: #ff5c1a;
-  --accent-hover: #ff7438;
+  --background: #ffffff;
+  --surface: #f7f9fc;
+  --surface-raised: #eef2f7;
+  --border: #dbe3ec;
+  --foreground: #0f172a;
+  --muted: #5b6b7f;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
   --accent-contrast: #ffffff;
-  --danger: #e5484d;
-  --success: #30a46c;
-  --warning: #f5a524;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #b45309;
 }
 
 @theme inline {
@@ -41,17 +48,17 @@ body {
   color: var(--foreground);
 }
 
-/* Keyboard focus must stay visible on a dark ground; the browser default
-   outline all but disappears against --surface. */
+/* Keyboard focus must stay obvious; the browser default outline is easy to
+   lose against a light surface. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-/* Respect a reduced-motion preference: hover-preview autoplay and transitions
-   are decorative, and vestibular triggers are a real accessibility concern on
-   a grid that animates on every card. */
+/* Respect a reduced-motion preference: hover previews and transitions are
+   decorative, and vestibular triggers are a real accessibility concern on a
+   grid that animates on every card. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

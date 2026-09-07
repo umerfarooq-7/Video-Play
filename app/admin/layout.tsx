@@ -7,6 +7,7 @@ import {
   FolderTree,
   Globe,
   UserRound,
+  Film,
 } from 'lucide-react'
 import { requireStaff } from '@/lib/auth/guards'
 
@@ -24,6 +25,7 @@ export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
     { href: '/admin/categories', label: 'Categories', icon: FolderTree, adminOnly: true },
     { href: '/admin/paysites', label: 'Networks', icon: Globe, adminOnly: true },
     { href: '/admin/models', label: 'Models', icon: UserRound, adminOnly: true },
+    { href: '/admin/videos', label: 'All videos', icon: Film, adminOnly: true },
   ].filter((link) => !link.adminOnly || isAdmin)
 
   return (

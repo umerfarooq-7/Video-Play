@@ -52,14 +52,21 @@ echo "    node $(node -v) · ffmpeg $(ffmpeg -version | head -1 | awk '{print $3
 # Application
 # ---------------------------------------------------------------------------
 
-if [[ -d "$APP_DIR/.git" ]]; then
+# The repository is private, so a plain clone would prompt for credentials and
+# fail on a headless box. SKIP_SOURCE=1 means the code was uploaded separately
+# (see deploy/push-code.sh); otherwise a deploy key must be installed first.
+if [[ "${SKIP_SOURCE:-0}" == "1" ]]; then
+  [[ -f "$APP_DIR/package.json" ]] || fail "SKIP_SOURCE=1 but no source found in $APP_DIR"
+  log "Using the source already in $APP_DIR"
+elif [[ -d "$APP_DIR/.git" ]]; then
   log "Updating checkout"
   git -C "$APP_DIR" fetch --quiet origin main
   git -C "$APP_DIR" reset --quiet --hard origin/main
 else
   log "Cloning repository"
   rm -rf "$APP_DIR"
-  git clone --quiet --depth 1 "$REPO_URL" "$APP_DIR"
+  git clone --quiet --depth 1 "$REPO_URL" "$APP_DIR" \
+    || fail "Clone failed — the repository is private. Install a deploy key, or upload the source and re-run with SKIP_SOURCE=1"
 fi
 
 # The build inlines NEXT_PUBLIC_* values, so config must land before it runs.

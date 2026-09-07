@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, requireStaff } from '@/lib/auth/guards'
+import { getProviderFor } from '@/lib/video/provider'
 
 export type ActionState = { error?: string; success?: string } | null
 
@@ -315,6 +316,72 @@ export async function removeVideo(
   revalidatePath('/admin/moderation')
   revalidatePath('/')
   return { success: 'Video removed.' }
+}
+
+/**
+ * Delete a video permanently: the database row and the media behind it.
+ *
+ * Admin only, and separate from `removeVideo`. Taking a video down is
+ * reversible and keeps the audit trail attached to a real row — that is what a
+ * DMCA response should normally be. This is for content that must genuinely
+ * cease to exist.
+ *
+ * The provider asset is deleted too. Dropping only the row would leave the file
+ * on the CDN, still billable and still reachable by anyone who kept the URL.
+ */
+export async function deleteVideoPermanently(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requireAdmin('/admin/videos')
+
+  const videoId = String(formData.get('videoId') ?? '')
+  if (!z.uuid().safeParse(videoId).success) return { error: 'Invalid request.' }
+
+  const supabase = await createClient()
+
+  const { data: video } = await supabase
+    .from('videos')
+    .select('id, title, provider, provider_asset_id')
+    .eq('id', videoId)
+    .maybeSingle()
+
+  if (!video) return { error: 'Video not found.' }
+
+  // Remove the media first. If this fails the row survives, so the orphan is
+  // still visible and can be retried — the reverse would leave a paid-for file
+  // with nothing pointing at it.
+  if (video.provider_asset_id) {
+    try {
+      await getProviderFor(video.provider).deleteAsset(video.provider_asset_id)
+    } catch (error) {
+      console.error('[deleteVideoPermanently] provider delete failed', error)
+      return {
+        error:
+          'Could not delete the media from the CDN, so the video was kept. ' +
+          'Try again, or remove it in the Bunny dashboard first.',
+      }
+    }
+  }
+
+  // Child rows (tags, categories, models, votes, jobs, clips, reports) all
+  // cascade from this.
+  const { error } = await supabase.from('videos').delete().eq('id', videoId)
+  if (error) return { error: error.message }
+
+  await audit({
+    actorId: admin.id,
+    action: 'video.delete',
+    entityType: 'video',
+    entityId: videoId,
+    detail: { title: video.title, assetId: video.provider_asset_id },
+  })
+
+  revalidatePath('/admin/videos')
+  revalidatePath('/admin/moderation')
+  revalidatePath('/')
+
+  return { success: `Deleted "${video.title}".` }
 }
 
 // ---------------------------------------------------------------------------
