@@ -136,7 +136,16 @@ systemctl restart vtube-site vtube-worker
 # nginx
 # ---------------------------------------------------------------------------
 
-log "Configuring nginx"
+# Certbot edits this file in place to add the TLS server block. Rewriting it on
+# every run therefore silently strips HTTPS and drops the live site back to
+# plain HTTP — which is exactly what happened on the first redeploy. Once TLS
+# is in the file, leave it alone.
+if grep -q "listen 443" /etc/nginx/sites-available/vtube 2>/dev/null; then
+  log "nginx already has TLS configured — leaving it untouched"
+  NGINX_ALREADY_TLS=1
+else
+  NGINX_ALREADY_TLS=0
+  log "Configuring nginx"
 
 cat > /etc/nginx/sites-available/vtube <<NGINX
 server {
@@ -165,6 +174,7 @@ server {
     }
 }
 NGINX
+fi
 
 ln -sf /etc/nginx/sites-available/vtube /etc/nginx/sites-enabled/vtube
 rm -f /etc/nginx/sites-enabled/default
@@ -185,13 +195,26 @@ ufw --force enable >/dev/null 2>&1 || true
 # HTTPS
 # ---------------------------------------------------------------------------
 
-log "Requesting the HTTPS certificate"
-if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" \
-     --non-interactive --agree-tos --email "$LE_EMAIL" --redirect >/dev/null 2>&1; then
-  echo "    certificate installed; renewal is automatic"
+if [[ "$NGINX_ALREADY_TLS" == "1" ]]; then
+  log "HTTPS already configured — skipping certbot"
+  echo "    renewal is handled by the certbot systemd timer"
+elif [[ -d "/etc/letsencrypt/live/$DOMAIN" ]]; then
+  # The certificate survives even when the nginx config is replaced, so this
+  # only re-applies it. No request reaches Let's Encrypt, so it cannot fail on
+  # a rate limit or a network blip the way a fresh issuance can.
+  log "Re-applying the existing certificate"
+  certbot install --nginx --cert-name "$DOMAIN" --redirect --non-interactive >/dev/null 2>&1 \
+    && echo "    certificate re-applied" \
+    || warn "could not re-apply the certificate: certbot install --nginx --cert-name $DOMAIN --redirect"
 else
-  warn "certbot failed — usually DNS has not propagated yet."
-  warn "Re-run once it has:  certbot --nginx -d $DOMAIN -d www.$DOMAIN --redirect"
+  log "Requesting the HTTPS certificate"
+  if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" \
+       --non-interactive --agree-tos --email "$LE_EMAIL" --redirect >/dev/null 2>&1; then
+    echo "    certificate installed; renewal is automatic"
+  else
+    warn "certbot failed — usually DNS has not propagated yet."
+    warn "Re-run once it has:  certbot --nginx -d $DOMAIN -d www.$DOMAIN --redirect"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
