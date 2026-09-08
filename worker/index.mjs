@@ -17,7 +17,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { spawn } from 'node:child_process'
 import { mkdir, rm, stat, readdir } from 'node:fs/promises'
-import { createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
