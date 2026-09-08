@@ -181,7 +181,9 @@ begin
 end;
 $fn$;
 
-drop trigger if exists on_auth_user_created on auth;
+-- NB: the table is auth.users, not auth. Dropping "on auth" fails with
+-- 42P01 because auth is a schema, not a relation.
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
