@@ -167,6 +167,8 @@ export type Video = {
   /** Section the uploader picked as the hover preview. Null = use the provider default. */
   preview_start_seconds: number | null
   preview_end_seconds: number | null
+  /** Scenes stitched into the hover promo, in play order (migration 0009). */
+  preview_segments: { start: number; end: number }[] | null
 }
 
 export type UploaderApplication = {

@@ -39,3 +39,6 @@ export const MAX_CATEGORIES_PER_VIDEO = 5
  * A grid autoplays many of these at once, so length here is bandwidth.
  */
 export const MAX_PREVIEW_SECONDS = 30
+
+/** Scenes that may be stitched into one hover promo. Mirrors the DB CHECK. */
+export const MAX_PREVIEW_SEGMENTS = 10

@@ -1,45 +1,46 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, Images, Scissors } from 'lucide-react'
+import { Loader2, Scissors, Check } from 'lucide-react'
 import { formatDuration } from '@/lib/format'
 
-/** Frames shown across the video so the uploader can see what is in it. */
+/** Frames offered across the video. */
 const STRIP_FRAMES = 10
 
-/** Default promo length, and the ceiling the database CHECK enforces. */
-const DEFAULT_PROMO_SECONDS = 10
-const MAX_PROMO_SECONDS = 30
+/** How long each chosen scene contributes to the promo. */
+const SEGMENT_SECONDS = 3
+
+/** Ceilings mirrored by the preview_segments_shape CHECK. */
+const MAX_SEGMENTS = 10
+const MAX_TOTAL_SECONDS = 30
 
 interface Frame {
   time: number
   dataUrl: string
 }
 
-export interface PromoWindow {
-  startSeconds: number
-  endSeconds: number
-  /** Frame at the start of the window, for the parent to show as a poster. */
+export interface PromoSelection {
+  segments: { start: number; end: number }[]
   posterDataUrl: string | null
 }
 
 /**
- * Pick the promo segment from a file that has not been uploaded yet.
+ * Pick the promo from a file that has not been uploaded yet.
  *
- * Everything here happens in the browser against the local file: an object URL
- * feeds a <video>, and frames are drawn onto a canvas. No upload, no server, no
- * CORS — and seeking is instant because the bytes are already on the machine.
+ * Everything runs in the browser against the local file: an object URL feeds a
+ * hidden <video> and frames are drawn onto a canvas. No upload, no server, no
+ * CORS, and seeking is instant because the bytes are already on the machine.
  *
- * That ordering is the point. Previously the video had to be uploaded and
- * encoded before a promo could be cut, which meant waiting through a transcode
- * before finding out the interesting part was somewhere else entirely.
+ * Several scenes can be chosen and are stitched into one preview. A single
+ * continuous window only ever shows one moment of a video; a few short cuts
+ * convey the whole thing in the same few seconds.
  */
 export function PromoPicker({
   file,
   onChange,
 }: {
   file: File
-  onChange: (window: PromoWindow | null) => void
+  onChange: (selection: PromoSelection | null) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -47,14 +48,22 @@ export function PromoPicker({
   const [duration, setDuration] = useState(0)
   const [frames, setFrames] = useState<Frame[]>([])
   const [scanning, setScanning] = useState(false)
-  const [start, setStart] = useState(0)
-  const [poster, setPoster] = useState<string | null>(null)
+  const [picked, setPicked] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const end = Math.min(start + DEFAULT_PROMO_SECONDS, duration || DEFAULT_PROMO_SECONDS)
+  const segments = picked
+    .slice()
+    .sort((a, b) => a - b)
+    .map((start) => ({
+      start: Number(start.toFixed(2)),
+      end: Number(Math.min(start + SEGMENT_SECONDS, duration || start + SEGMENT_SECONDS).toFixed(2)),
+    }))
 
-  // Attach the local file. revokeObjectURL matters: without it the browser
-  // holds the whole file in memory until the tab closes.
+  const totalSeconds = segments.reduce((sum, s) => sum + (s.end - s.start), 0)
+  const atLimit = picked.length >= MAX_SEGMENTS || totalSeconds >= MAX_TOTAL_SECONDS
+
+  // revokeObjectURL matters: without it the browser pins the whole file in
+  // memory until the tab closes.
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -74,7 +83,7 @@ export function PromoPicker({
       const done = () => {
         video.removeEventListener('seeked', done)
         // 'seeked' fires before the new frame is reliably painted in some
-        // browsers; capturing immediately yields the previous frame.
+        // browsers, and capturing early yields the previous frame.
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
       }
       video.addEventListener('seeked', done)
@@ -102,7 +111,6 @@ export function PromoPicker({
     }
   }, [])
 
-  /** Walk the file and grab evenly spaced frames. */
   const buildStrip = useCallback(async () => {
     const video = videoRef.current
     if (!video || !video.duration || !Number.isFinite(video.duration)) return
@@ -112,7 +120,7 @@ export function PromoPicker({
 
     try {
       for (let i = 0; i < STRIP_FRAMES; i++) {
-        // Half-step offset: the first frame of a video is very often black.
+        // Half-step offset: the opening frame of a video is very often black.
         const time = ((i + 0.5) / STRIP_FRAMES) * video.duration
         await seekAndSettle(video, time)
         const dataUrl = capture()
@@ -137,35 +145,36 @@ export function PromoPicker({
     void buildStrip()
   }
 
-  /** Refresh the poster and tell the parent which window is selected. */
-  const commit = useCallback(
-    async (nextStart: number) => {
-      const video = videoRef.current
-      if (!video || !duration) return
+  function toggle(time: number) {
+    setPicked((prev) => {
+      if (prev.includes(time)) return prev.filter((t) => t !== time)
+      if (prev.length >= MAX_SEGMENTS) return prev
+      if ((prev.length + 1) * SEGMENT_SECONDS > MAX_TOTAL_SECONDS) return prev
+      return [...prev, time]
+    })
+  }
 
-      const clamped = Math.max(0, Math.min(nextStart, Math.max(0, duration - 1)))
-      await seekAndSettle(video, clamped)
-      const shot = capture(320)
-
-      setPoster(shot)
-      onChange({
-        startSeconds: Number(clamped.toFixed(2)),
-        endSeconds: Number(
-          Math.min(clamped + DEFAULT_PROMO_SECONDS, duration).toFixed(2),
-        ),
-        posterDataUrl: shot,
-      })
-    },
-    [duration, seekAndSettle, capture, onChange],
-  )
-
-  // Select an opening window as soon as the strip is ready, so a user who
-  // changes nothing still gets a sensible promo instead of none.
+  // Default to the first scene so a user who changes nothing still gets a
+  // sensible promo rather than none at all.
   useEffect(() => {
-    if (duration > 0 && frames.length === STRIP_FRAMES && poster === null) {
-      void commit(start)
+    if (frames.length === STRIP_FRAMES && picked.length === 0) {
+      setPicked([frames[0].time])
     }
-  }, [duration, frames.length, poster, start, commit])
+  }, [frames, picked.length])
+
+  // Report upward whenever the selection changes. The poster is the frame the
+  // promo opens on, which is the first thing a viewer sees on hover.
+  useEffect(() => {
+    if (segments.length === 0) {
+      onChange(null)
+      return
+    }
+    const first = frames.find((f) => f.time === segments[0].start)
+    onChange({ segments, posterDataUrl: first?.dataUrl ?? null })
+    // segments is derived from picked/duration; depending on those avoids an
+    // identity-change loop on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, duration, frames])
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-background p-3">
@@ -192,7 +201,8 @@ export function PromoPicker({
         ) : (
           duration > 0 && (
             <span className="text-xs text-muted">
-              {formatDuration(duration)} total
+              {segments.length} scene{segments.length === 1 ? '' : 's'} ·{' '}
+              {totalSeconds.toFixed(0)}s promo
             </span>
           )
         )}
@@ -201,30 +211,39 @@ export function PromoPicker({
       {error && <p className="text-xs text-danger">{error}</p>}
 
       <p className="text-[11px] leading-relaxed text-muted">
-        This is the {DEFAULT_PROMO_SECONDS}-second clip that plays when someone
-        hovers your video in the grid. Click a scene below, or drag the slider,
-        to choose where it starts.
+        Click as many scenes as you like — they are joined into the short clip
+        that plays when someone hovers your video. {SEGMENT_SECONDS} seconds
+        from each, up to {MAX_TOTAL_SECONDS} seconds total.
       </p>
 
-      {/* Scene strip */}
       {frames.length > 0 && (
         <div className="grid grid-cols-5 gap-1.5">
           {frames.map((frame) => {
-            const inWindow = frame.time >= start && frame.time <= end
+            const isPicked = picked.includes(frame.time)
+            const order = segments.findIndex((s) => s.start === Number(frame.time.toFixed(2)))
+            const disabled = !isPicked && atLimit
+
             return (
               <button
                 key={frame.time}
                 type="button"
-                onClick={() => {
-                  setStart(frame.time)
-                  void commit(frame.time)
-                }}
-                title={`Start the promo at ${formatDuration(frame.time)}`}
-                className={`relative overflow-hidden rounded border-2 transition-colors ${
-                  inWindow ? 'border-accent' : 'border-transparent hover:border-muted'
+                onClick={() => toggle(frame.time)}
+                disabled={disabled}
+                aria-pressed={isPicked}
+                title={
+                  isPicked
+                    ? `Remove the scene at ${formatDuration(frame.time)}`
+                    : `Add the scene at ${formatDuration(frame.time)}`
+                }
+                className={`relative overflow-hidden rounded border-2 transition-all ${
+                  isPicked
+                    ? 'border-accent ring-2 ring-accent/30'
+                    : disabled
+                      ? 'cursor-not-allowed border-transparent opacity-40'
+                      : 'border-transparent hover:border-muted'
                 }`}
               >
-                {/* Canvas data URLs: next/image would have nothing to optimise
+                {/* Canvas data URLs: next/image has nothing to optimise here
                     and cannot cache a data URI anyway. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -232,6 +251,16 @@ export function PromoPicker({
                   alt={`Frame at ${formatDuration(frame.time)}`}
                   className="aspect-video w-full object-cover"
                 />
+
+                {isPicked && order >= 0 && (
+                  // The number is the play order, not just a tick — with
+                  // several scenes joined, which comes first is the thing you
+                  // actually need to see.
+                  <span className="absolute left-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-accent text-[9px] font-bold text-accent-contrast">
+                    {order + 1}
+                  </span>
+                )}
+
                 <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[9px] tabular-nums text-white">
                   {formatDuration(frame.time)}
                 </span>
@@ -241,53 +270,23 @@ export function PromoPicker({
         </div>
       )}
 
-      {duration > 0 && (
-        <>
-          <div>
-            <div className="flex items-baseline justify-between text-xs">
-              <label htmlFor="promo-start" className="font-medium">
-                Promo starts at
-              </label>
-              <span className="tabular-nums text-muted">
-                {formatDuration(start)} – {formatDuration(end)}
-              </span>
-            </div>
-            <input
-              id="promo-start"
-              type="range"
-              min={0}
-              max={Math.max(0, duration - 1)}
-              step={0.5}
-              value={start}
-              onChange={(e) => setStart(Number(e.target.value))}
-              onPointerUp={() => void commit(start)}
-              onKeyUp={() => void commit(start)}
-              className="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-surface-raised accent-[var(--accent)]"
-            />
-          </div>
-
-          {/* The exact opening frame, larger. It becomes the first thing a
-              viewer sees on hover, so it is worth showing properly. */}
-          {poster && (
-            <div className="flex items-center gap-3">
-              <div className="w-32 shrink-0 overflow-hidden rounded border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={poster} alt="" className="aspect-video w-full object-cover" />
-              </div>
-              <p className="flex items-center gap-1.5 text-[11px] text-muted">
-                <Images size={12} aria-hidden />
-                Your promo opens on this frame.
-              </p>
-            </div>
-          )}
-        </>
+      {atLimit && (
+        <p className="flex items-center gap-1 text-[11px] text-accent">
+          <Check size={11} aria-hidden />
+          Maximum promo length reached. Unpick a scene to swap one in.
+        </p>
       )}
 
       {/* Submitted with the form. */}
-      <input type="hidden" name="previewStartSeconds" value={start.toFixed(2)} />
-      <input type="hidden" name="previewEndSeconds" value={end.toFixed(2)} />
+      <input type="hidden" name="previewSegments" value={JSON.stringify(segments)} />
+      <input
+        type="hidden"
+        name="previewStartSeconds"
+        value={segments[0]?.start ?? ''}
+      />
+      <input type="hidden" name="previewEndSeconds" value={segments[0]?.end ?? ''} />
     </div>
   )
 }
 
-export { MAX_PROMO_SECONDS, DEFAULT_PROMO_SECONDS }
+export { SEGMENT_SECONDS, MAX_SEGMENTS, MAX_TOTAL_SECONDS }

@@ -249,6 +249,34 @@ function runJson(command, args) {
   })
 }
 
+/**
+ * Coerce the promo scenes off a video row into something safe to build an
+ * ffmpeg filter graph from.
+ *
+ * The column is validated by a CHECK constraint, but this reads it back out of
+ * JSON and interpolates it straight into a command string — so it is re-checked
+ * here rather than trusted. A stray value would not throw, it would silently
+ * produce a malformed filter.
+ */
+function normaliseSegments(raw) {
+  if (!Array.isArray(raw)) return null
+
+  const clean = raw
+    .filter(
+      (s) =>
+        s &&
+        typeof s === 'object' &&
+        Number.isFinite(Number(s.start)) &&
+        Number.isFinite(Number(s.end)) &&
+        Number(s.end) > Number(s.start) &&
+        Number(s.start) >= 0,
+    )
+    .map((s) => ({ start: Number(s.start).toFixed(3), end: Number(s.end).toFixed(3) }))
+    .slice(0, 10)
+
+  return clean.length > 0 ? clean : null
+}
+
 async function probe(file) {
   const data = await runJson(FFPROBE, [
     '-v', 'error',
@@ -466,7 +494,9 @@ async function processJob(job) {
   } else if (job.kind === 'clip') {
     const { data: source } = await supabase
       .from('videos')
-      .select('id, provider, provider_asset_id, playback_hls_path')
+      .select(
+        'id, provider, provider_asset_id, playback_hls_path, preview_segments',
+      )
       .eq('id', job.clip_source_id)
       .single()
 
@@ -493,17 +523,50 @@ async function processJob(job) {
       await stat(sourceInput)
     }
 
-    await run(FFMPEG, [
-      ...preArgs,
-      // -ss before -i seeks by keyframe (fast, and over HLS it skips whole
-      // segments); re-encoding below makes the cut frame-accurate anyway.
-      '-ss', String(job.clip_start_seconds),
-      '-to', String(job.clip_end_seconds),
-      '-i', sourceInput,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
-      '-c:a', 'aac',
-      input,
-    ])
+    // A hover promo can be several scenes stitched together. Anything else is
+    // one continuous cut.
+    const segments = job.is_preview ? normaliseSegments(source.preview_segments) : null
+
+    if (segments && segments.length > 1) {
+      log(`stitching ${segments.length} scenes into the promo`)
+
+      // trim works on absolute timestamps from the full input, so there is no
+      // -ss before -i here: seeking first would shift every later timestamp.
+      // setpts rebases each piece to zero, which concat requires.
+      const filters = segments
+        .map(
+          (s, i) =>
+            `[0:v]trim=start=${s.start}:end=${s.end},setpts=PTS-STARTPTS[v${i}]`,
+        )
+        .join(';')
+      const inputs = segments.map((_, i) => `[v${i}]`).join('')
+
+      await run(FFMPEG, [
+        ...preArgs,
+        '-i', sourceInput,
+        '-filter_complex',
+        `${filters};${inputs}concat=n=${segments.length}:v=1:a=0[out]`,
+        '-map', '[out]',
+        // Promos play muted on a grid, so audio is dropped. It also avoids
+        // concatenating audio streams that may differ between scenes.
+        '-an',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+        input,
+      ])
+    } else {
+      const window = segments?.[0]
+      await run(FFMPEG, [
+        ...preArgs,
+        // -ss before -i seeks by keyframe (fast, and over HLS it skips whole
+        // segments); re-encoding below makes the cut frame-accurate anyway.
+        '-ss', String(window ? window.start : job.clip_start_seconds),
+        '-to', String(window ? window.end : job.clip_end_seconds),
+        '-i', sourceInput,
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+        ...(job.is_preview ? ['-an'] : ['-c:a', 'aac']),
+        input,
+      ])
+    }
   } else {
     throw new Error(`Unknown job kind: ${job.kind}`)
   }

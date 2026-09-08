@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { UploadCloud, CheckCircle2 } from 'lucide-react'
 import { createUploadDraft, finalizeUpload } from '@/lib/studio/video-actions'
 import { VideoMetadataFields } from '@/components/studio/VideoMetadataFields'
-import { PromoPicker, type PromoWindow } from '@/components/studio/PromoPicker'
+import { PromoPicker, type PromoSelection } from '@/components/studio/PromoPicker'
 import { FormMessage } from '@/components/form'
 import { ACCEPTED_VIDEO_TYPES, MAX_UPLOAD_BYTES } from '@/lib/constants'
 import type { Category, Model, Paysite } from '@/types/database'
@@ -39,7 +39,7 @@ export function UploadForm({
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [file, setFile] = useState<File | null>(null)
-  const [promo, setPromo] = useState<PromoWindow | null>(null)
+  const [promo, setPromo] = useState<PromoSelection | null>(null)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

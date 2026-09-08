@@ -12,6 +12,7 @@ import {
   MAX_CATEGORIES_PER_VIDEO,
   MAX_CLIP_SECONDS,
   MAX_PREVIEW_SECONDS,
+  MAX_PREVIEW_SEGMENTS,
 } from '@/lib/constants'
 import type { VideoProjection } from '@/types/database'
 
@@ -89,6 +90,38 @@ const metadataSchema = z.object({
   // Chosen in the browser before upload, from the local file.
   previewStartSeconds: z.coerce.number().min(0).optional(),
   previewEndSeconds: z.coerce.number().min(0).optional(),
+  // JSON array of scenes stitched into the promo. Parsed and re-validated
+  // here rather than trusted: the worker feeds these straight into an ffmpeg
+  // filter graph, where a malformed entry becomes a broken command.
+  previewSegments: z
+    .string()
+    .optional()
+    .transform((raw) => {
+      if (!raw) return null
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return null
+
+        const clean = parsed
+          .filter(
+            (s): s is { start: number; end: number } =>
+              !!s &&
+              typeof s === 'object' &&
+              typeof (s as { start?: unknown }).start === 'number' &&
+              typeof (s as { end?: unknown }).end === 'number',
+          )
+          .filter((s) => s.end > s.start && s.start >= 0 && s.end - s.start <= 15)
+          .slice(0, MAX_PREVIEW_SEGMENTS)
+          .map((s) => ({
+            start: Number(s.start.toFixed(3)),
+            end: Number(s.end.toFixed(3)),
+          }))
+
+        return clean.length > 0 ? clean : null
+      } catch {
+        return null
+      }
+    }),
 
   rightsAttested: z.literal('on', {
     error: 'You must confirm you hold the rights to this video.',
@@ -211,6 +244,7 @@ function readMetadata(formData: FormData) {
     producedOn: formData.get('producedOn') || undefined,
     previewStartSeconds: formData.get('previewStartSeconds') || undefined,
     previewEndSeconds: formData.get('previewEndSeconds') || undefined,
+    previewSegments: formData.get('previewSegments') || undefined,
     rightsAttested: formData.get('rightsAttested'),
     consentAttested: formData.get('consentAttested'),
   })
@@ -360,6 +394,7 @@ export async function createUploadDraft(
       full_duration_seconds: parsed.data.fullDurationSeconds ?? null,
       is_source_only: isSourceOnly,
       ...promoWindow(parsed.data.previewStartSeconds, parsed.data.previewEndSeconds),
+      preview_segments: parsed.data.previewSegments,
     })
     .select('id')
     .single()
