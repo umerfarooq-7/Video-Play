@@ -42,7 +42,7 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-[1800px] gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <span className="text-lg font-extrabold tracking-tight">
-            <span className="text-accent">V</span>Tube
+            <span className="text-accent">X</span> PORN HOUSE
           </span>
           <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
             All performers appearing on this site were 18 years or older at the
@@ -73,7 +73,7 @@ export function SiteFooter() {
 
       <div className="border-t border-border px-4 py-4">
         <p className="mx-auto max-w-[1800px] text-xs text-muted">
-          &copy; {new Date().getFullYear()} VTube. 18+ only.
+          &copy; {new Date().getFullYear()} X PORN HOUSE. 18+ only.
         </p>
       </div>
     </footer>

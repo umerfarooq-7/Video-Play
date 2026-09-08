@@ -13,7 +13,7 @@ import { REGION_CONFIG, isRegion } from '@/lib/geo'
 import { COUNTRY_HEADER, REGION_HEADER } from '@/lib/constants'
 
 export const metadata = {
-  title: 'VTube — Video streaming',
+  title: 'X PORN HOUSE — Video streaming',
 }
 
 export default async function HomePage() {

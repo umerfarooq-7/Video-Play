@@ -24,6 +24,19 @@
   --danger: #dc2626;
   --success: #16a34a;
   --warning: #b45309;
+
+  /* The header is a dark navy band rather than white. It anchors the page,
+     separates chrome from content, and keeps the logo legible without a
+     border — the look the client asked for. Its own foreground tokens exist
+     because --foreground and --muted are tuned for contrast on white and are
+     unreadable on navy. */
+  --header: #10375c;
+  --header-raised: #17456f;
+  --header-foreground: #ffffff;
+  --header-muted: #b3c9de;
+  /* A lighter blue for accents sitting ON the navy bar. The main --accent is
+     tuned for white and turns into dark-blue-on-dark-blue up there. */
+  --header-accent: #6cb8f5;
 }
 
 @theme inline {
@@ -36,6 +49,11 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-contrast: var(--accent-contrast);
+  --color-header: var(--header);
+  --color-header-raised: var(--header-raised);
+  --color-header-foreground: var(--header-foreground);
+  --color-header-muted: var(--header-muted);
+  --color-header-accent: var(--header-accent);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);

@@ -1,4 +1,4 @@
-# VTube — video platform
+# X PORN HOUSE — video platform
 
 Next.js 16 (App Router) + Supabase (Postgres, Auth, RLS). Adult video tube
 site with uploader approval, moderation, clip cutting, remote-URL import and a

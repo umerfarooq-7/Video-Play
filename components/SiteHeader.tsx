@@ -21,15 +21,15 @@ export async function SiteHeader() {
   const navCategories = categories.slice(0, 8)
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+    <header className="sticky top-0 z-40 bg-header text-header-foreground">
       <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-3 px-3 sm:px-4">
         <MobileNav categories={categories} />
 
         <Link
           href="/"
-          className="shrink-0 text-lg font-extrabold tracking-tight text-foreground"
+          className="shrink-0 text-lg font-extrabold tracking-tight text-header-foreground"
         >
-          <span className="text-accent">V</span>Tube
+          <span className="text-header-accent">X</span> PORN HOUSE
         </Link>
 
         {/* Search is a plain GET form so it works without JavaScript and the
@@ -44,12 +44,12 @@ export async function SiteHeader() {
             name="q"
             placeholder="Search videos, categories, tags…"
             autoComplete="off"
-            className="h-9 w-full rounded-full border border-border bg-surface pl-9 pr-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            className="h-9 w-full rounded-full border border-white/15 bg-header-raised pl-9 pr-3 text-sm text-header-foreground placeholder:text-header-muted focus:border-white/40 focus:outline-none"
           />
           <Search
             size={15}
             aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-header-muted"
           />
         </form>
 
@@ -71,7 +71,7 @@ export async function SiteHeader() {
               // dashboard, and a bare shield next to the avatar reads as
               // decoration. The label collapses on narrow screens where the
               // search field needs the room.
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-header-foreground hover:bg-white/20"
             >
               <Shield size={14} aria-hidden />
               <span className="hidden sm:inline">
@@ -84,9 +84,9 @@ export async function SiteHeader() {
           {profile ? (
             <Link
               href={`/u/${profile.username}`}
-              className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm hover:bg-surface"
+              className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm text-header-foreground hover:bg-header-raised"
             >
-              <span className="grid size-7 place-items-center rounded-full bg-surface-raised text-xs font-semibold uppercase">
+              <span className="grid size-7 place-items-center rounded-full bg-header-raised text-xs font-semibold uppercase">
                 {(profile.display_name ?? profile.username).charAt(0)}
               </span>
               <span className="hidden max-w-28 truncate sm:inline">
@@ -97,7 +97,7 @@ export async function SiteHeader() {
             <>
               <Link
                 href="/login"
-                className="rounded-full px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface"
+                className="rounded-full px-3 py-1.5 text-xs font-semibold text-header-foreground hover:bg-header-raised"
               >
                 Log in
               </Link>
@@ -115,11 +115,11 @@ export async function SiteHeader() {
 
       {/* Category rail. Horizontally scrollable rather than wrapped, so it
           stays one row on a phone. */}
-      <div className="border-t border-border">
+      <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto px-3 py-1.5 scrollbar-none sm:px-4">
           <Link
             href="/"
-            className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-muted hover:bg-surface hover:text-foreground"
+            className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-header-muted hover:bg-header-raised hover:text-header-foreground"
           >
             Home
           </Link>
@@ -127,14 +127,14 @@ export async function SiteHeader() {
             <Link
               key={category.id}
               href={`/category/${category.slug}`}
-              className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-muted hover:bg-surface hover:text-foreground"
+              className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-header-muted hover:bg-header-raised hover:text-header-foreground"
             >
               {category.name}
             </Link>
           ))}
           <Link
             href="/categories"
-            className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-accent hover:bg-surface"
+            className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-white hover:bg-header-raised"
           >
             All categories
           </Link>

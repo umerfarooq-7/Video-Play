@@ -19,8 +19,8 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
   ),
   title: {
-    default: 'VTube — Video streaming',
-    template: '%s · VTube',
+    default: 'X PORN HOUSE — Video streaming',
+    template: '%s · X PORN HOUSE',
   },
   description: 'Browse, search and watch video. Adults only.',
   robots: {
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#ffffff',
+  themeColor: '#10375c',
   width: 'device-width',
   initialScale: 1,
 }
