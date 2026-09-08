@@ -516,6 +516,7 @@ async function processJob(job) {
       sourceInput = `${CDN_BASE}/${source.playback_hls_path ?? `${source.provider_asset_id}/playlist.m3u8`}`
       preArgs.push('-headers', `Referer: ${SITE_URL}/\r\n`)
       log(`cutting from Bunny source ${sourceInput}`)
+      await waitForSource(sourceInput)
     } else {
       // Local: cut from the original upload rather than the HLS renditions —
       // the mezzanine is higher quality and seeks frame-accurately.
@@ -721,6 +722,38 @@ async function processJob(job) {
   log(`finished job ${job.id}`)
 }
 
+/**
+ * Wait until the CDN will actually serve the source.
+ *
+ * Bunny announces a video as finished as soon as one rendition is ready, and
+ * the webhook queues the promo cut on that signal — but the playlist itself
+ * can take another minute to assemble, so ffmpeg opens it and gets a 404. The
+ * video is fine; only the cut is early. Poll until it answers.
+ */
+async function waitForSource(url, { attempts = 20, delayMs = 15_000 } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      // Hotlink protection refuses a request with no Referer, so send the same
+      // one the cut itself will use.
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Referer: `${SITE_URL}/` },
+      })
+      if (response.ok) {
+        if (attempt > 1) log(`source ready after ${attempt} checks`)
+        return
+      }
+      if (attempt === 1) log(`source answered ${response.status}; waiting for the encode`)
+    } catch (error) {
+      if (attempt === 1) log(`source unreachable (${error.message}); waiting`)
+    }
+
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, delayMs))
+  }
+
+  throw new Error('The video was still encoding when the promo cut started.')
+}
+
 async function failJob(job, error) {
   const message = error?.message ?? String(error)
   log(`job ${job.id} failed: ${message}`)
@@ -738,7 +771,12 @@ async function failJob(job, error) {
     })
     .eq('id', job.id)
 
-  if (exhausted) {
+  if (exhausted && job.kind !== 'clip') {
+    // Only the jobs that produce the video's own media can fail the video. A
+    // clip is a derived extra — the promo, or a cut a user asked for — and the
+    // video it came from is already encoded and playable. Failing it here
+    // would show the uploader a broken video because a bonus artefact did not
+    // build.
     await supabase.from('videos').update({ status: 'failed' }).eq('id', job.video_id)
   }
 }
