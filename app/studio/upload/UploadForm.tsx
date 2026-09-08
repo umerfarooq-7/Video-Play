@@ -292,6 +292,22 @@ async function tusUpload(
       // rather than making the user start a multi-gigabyte transfer again.
       retryDelays: [0, 3000, 5000, 10000, 20000, 60000],
       headers: target.headers,
+      // Bunny gives every video the same TUS endpoint, and the default
+      // fingerprint is just the file plus that endpoint. Uploading a file a
+      // second time therefore matched the FIRST video's finished upload,
+      // resumed it, and reported success within a second — while the new video
+      // received nothing and sat in Processing forever with zero bytes stored.
+      // Naming the video in the fingerprint keeps one video's upload from ever
+      // standing in for another's.
+      fingerprint: async (candidate: File) =>
+        [
+          'tus',
+          target.headers.VideoId ?? target.url,
+          candidate.name,
+          candidate.type,
+          candidate.size,
+          candidate.lastModified,
+        ].join('/'),
       metadata: {
         filetype: file.type || 'video/mp4',
         title: file.name,
@@ -304,7 +320,9 @@ async function tusUpload(
         reject(new Error(error instanceof Error ? error.message : 'The upload failed.')),
     })
 
-    // Resume a previous attempt at the same file if one is still valid.
+    // Pick up an interrupted attempt at this same video — a reload part-way
+    // through a large upload, say. Within one attempt retryDelays above
+    // already covers a dropped connection.
     upload.findPreviousUploads().then((previous) => {
       if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
       upload.start()
