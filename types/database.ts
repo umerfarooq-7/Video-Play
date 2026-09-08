@@ -162,6 +162,11 @@ export type Video = {
   /** Directly downloadable file, when the provider exposes one. */
   download_path: string | null
   downloads_enabled: boolean
+
+  // --- Promo window chosen at upload time (migration 0008) ---
+  /** Section the uploader picked as the hover preview. Null = use the provider default. */
+  preview_start_seconds: number | null
+  preview_end_seconds: number | null
 }
 
 export type UploaderApplication = {
@@ -199,6 +204,8 @@ export type IngestJob = {
   finished_at: string | null
   created_at: string
   updated_at: string
+  /** Cut the hover preview rather than a standalone promo video. */
+  is_preview: boolean
 }
 
 export type Clip = {

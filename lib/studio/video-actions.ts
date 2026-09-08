@@ -8,7 +8,11 @@ import { requireUploader } from '@/lib/auth/guards'
 import { getVideoProvider } from '@/lib/video/provider'
 import { validateRemoteUrl, probeRemoteUrl, UnsafeUrlError } from '@/lib/video/remote-url'
 import { slugify } from '@/lib/format'
-import { MAX_CATEGORIES_PER_VIDEO, MAX_CLIP_SECONDS } from '@/lib/constants'
+import {
+  MAX_CATEGORIES_PER_VIDEO,
+  MAX_CLIP_SECONDS,
+  MAX_PREVIEW_SECONDS,
+} from '@/lib/constants'
 import type { VideoProjection } from '@/types/database'
 
 export type StudioState = {
@@ -81,6 +85,10 @@ const metadataSchema = z.object({
   producedOn: z
     .union([z.iso.date(), z.literal('')])
     .optional(),
+
+  // Chosen in the browser before upload, from the local file.
+  previewStartSeconds: z.coerce.number().min(0).optional(),
+  previewEndSeconds: z.coerce.number().min(0).optional(),
 
   rightsAttested: z.literal('on', {
     error: 'You must confirm you hold the rights to this video.',
@@ -158,6 +166,35 @@ async function attachTaxonomy(
   }
 }
 
+/**
+ * Normalise the promo window the browser picked.
+ *
+ * Returns nulls unless the pair is complete and inside the bounds the
+ * `preview_window_valid` CHECK enforces — a rejected insert over a cosmetic
+ * field would fail the whole upload.
+ */
+function promoWindow(
+  start: number | undefined,
+  end: number | undefined,
+): { preview_start_seconds: number | null; preview_end_seconds: number | null } {
+  const none = { preview_start_seconds: null, preview_end_seconds: null }
+
+  if (start === undefined || end === undefined) return none
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return none
+  if (end <= start) return none
+  if (end - start > MAX_PREVIEW_SECONDS) {
+    return {
+      preview_start_seconds: Number(start.toFixed(3)),
+      preview_end_seconds: Number((start + MAX_PREVIEW_SECONDS).toFixed(3)),
+    }
+  }
+
+  return {
+    preview_start_seconds: Number(start.toFixed(3)),
+    preview_end_seconds: Number(end.toFixed(3)),
+  }
+}
+
 function readMetadata(formData: FormData) {
   return metadataSchema.safeParse({
     title: formData.get('title'),
@@ -172,6 +209,8 @@ function readMetadata(formData: FormData) {
     contentOrientation: formData.get('contentOrientation') || 'straight',
     contentHeat: formData.get('contentHeat') || 'hardcore',
     producedOn: formData.get('producedOn') || undefined,
+    previewStartSeconds: formData.get('previewStartSeconds') || undefined,
+    previewEndSeconds: formData.get('previewEndSeconds') || undefined,
     rightsAttested: formData.get('rightsAttested'),
     consentAttested: formData.get('consentAttested'),
   })
@@ -320,6 +359,7 @@ export async function createUploadDraft(
       produced_on: parsed.data.producedOn || null,
       full_duration_seconds: parsed.data.fullDurationSeconds ?? null,
       is_source_only: isSourceOnly,
+      ...promoWindow(parsed.data.previewStartSeconds, parsed.data.previewEndSeconds),
     })
     .select('id')
     .single()

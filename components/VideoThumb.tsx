@@ -15,6 +15,16 @@ import { isRemoteAsset } from '@/lib/format'
  * Touch devices get nothing: there is no hover, and firing previews on scroll
  * would burn a phone's data allowance for no benefit.
  */
+/**
+ * Is this preview a clip rather than an animation?
+ *
+ * Bunny serves a cut clip from `/original` with no extension, so an extension
+ * check alone would misclassify it as an image and render a broken <img>.
+ */
+function isVideoPreview(url: string): boolean {
+  return /\/original(\?|$)/.test(url) || /\.(mp4|webm|m4v)(\?|$)/i.test(url)
+}
+
 export function VideoThumb({
   thumbnailUrl,
   previewUrl,
@@ -62,18 +72,34 @@ export function VideoThumb({
         </div>
       )}
 
+      {/* The preview is either the CDN's animated WebP or a short clip the
+          uploader cut, which is an MP4. Both are handled: a <video> for the
+          cut, an <img> for the animation. Never next/image — the optimizer
+          would strip a WebP animation down to its first frame. */}
       {loaded && previewUrl && (
-        // A plain <img>: this is an animated WebP, and running it through the
-        // image optimizer would strip the animation and produce a still frame.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={previewUrl}
-          alt=""
-          aria-hidden
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
-            showPreview ? 'opacity-100' : 'opacity-0'
-          }`}
-        />
+        isVideoPreview(previewUrl) ? (
+          <video
+            src={previewUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+            aria-hidden
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+              showPreview ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt=""
+            aria-hidden
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+              showPreview ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+        )
       )}
     </div>
   )

@@ -33,3 +33,9 @@ export const MAX_CLIP_SECONDS = 600
  * they did once, and the result was a form that silently refused to submit.
  */
 export const MAX_CATEGORIES_PER_VIDEO = 5
+
+/**
+ * Longest hover preview. Mirrors the preview_window_valid CHECK on videos.
+ * A grid autoplays many of these at once, so length here is bandwidth.
+ */
+export const MAX_PREVIEW_SECONDS = 30

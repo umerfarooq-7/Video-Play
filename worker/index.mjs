@@ -522,6 +522,44 @@ async function processJob(job) {
     .eq('id', job.video_id)
     .single()
 
+  // A preview job cuts the hover clip for a video that already exists. It must
+  // not touch that video's own asset or status — only hang the finished clip
+  // on it. Everything else about the row stays exactly as the moderator left
+  // it, which matters because this runs after the video is already in review.
+  if (job.is_preview) {
+    if (outputVideo?.provider !== 'bunny') {
+      throw new Error('Preview cuts are only implemented for the bunny provider.')
+    }
+
+    log('uploading hover preview to Bunny')
+    const guid = await bunnyCreateVideo(
+      `${outputVideo.title ?? 'Video'} — preview`,
+    )
+    await bunnyUpload(guid, input)
+
+    // /original is the file we just sent, served straight back. No wait for
+    // Bunny to encode: a ten-second muted loop needs no rendition ladder, and
+    // waiting would leave the grid on the default preview for several minutes.
+    await supabase
+      .from('videos')
+      .update({ preview_clip_path: `${guid}/original` })
+      .eq('id', job.video_id)
+
+    await supabase
+      .from('ingest_jobs')
+      .update({
+        status: 'succeeded',
+        progress: 100,
+        finished_at: new Date().toISOString(),
+        locked_by: null,
+      })
+      .eq('id', job.id)
+
+    await rm(input, { force: true })
+    log(`finished preview job ${job.id} (${guid})`)
+    return
+  }
+
   if (outputVideo?.provider === 'bunny') {
     log('uploading cut to Bunny')
 

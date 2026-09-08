@@ -78,7 +78,9 @@ export async function POST(request: NextRequest) {
 
   const { data: video } = await admin
     .from('videos')
-    .select('id, status, title')
+    .select(
+      'id, status, title, owner_id, preview_start_seconds, preview_end_seconds',
+    )
     .eq('provider_asset_id', guid)
     .maybeSingle()
 
@@ -150,6 +152,30 @@ export async function POST(request: NextRequest) {
     })
     .eq('video_id', video.id)
     .in('status', ['queued', 'running'])
+
+  // If the uploader picked a promo window, queue the worker to cut it. Until
+  // that job runs the grid falls back to the provider's own preview, so the
+  // card is never left without one.
+  if (video.preview_start_seconds !== null && video.preview_end_seconds !== null) {
+    const { error: jobError } = await admin.from('ingest_jobs').insert({
+      video_id: video.id,
+      requested_by: video.owner_id,
+      kind: 'clip',
+      is_preview: true,
+      // Source and target are the same video: cut a section out of it and
+      // hang the result back on it as the hover preview.
+      clip_source_id: video.id,
+      clip_start_seconds: video.preview_start_seconds,
+      clip_end_seconds: video.preview_end_seconds,
+      status: 'queued',
+    })
+
+    if (jobError) {
+      // Not fatal. The video is already in review and playable; only the
+      // custom preview is missing, and the provider default still shows.
+      console.error('[bunny webhook] could not queue the promo cut', jobError)
+    }
+  }
 
   return NextResponse.json({ ok: true, result: 'pending_review' })
 }
