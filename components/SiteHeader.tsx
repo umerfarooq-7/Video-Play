@@ -18,7 +18,6 @@ export async function SiteHeader() {
   const isStaff = profile?.role === 'admin' || profile?.role === 'moderator'
   const canUpload = profile?.uploader_status === 'approved'
 
-  const navCategories = categories.slice(0, 8)
 
   return (
     <header className="sticky top-0 z-40 bg-header text-header-foreground">
@@ -116,14 +115,12 @@ export async function SiteHeader() {
       {/* Category rail. Horizontally scrollable rather than wrapped, so it
           stays one row on a phone. */}
       <div className="border-t border-white/10">
+        {/* Every category, not a truncated few, with "All categories" as the
+            last item you scroll to. Cutting the list short made the strip look
+            complete when it was not. There is no Home link: the site name is
+            the way back, which is where people look for it anyway. */}
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto px-3 py-1.5 scrollbar-none sm:px-4">
-          <Link
-            href="/"
-            className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-header-muted hover:bg-header-raised hover:text-header-foreground"
-          >
-            Home
-          </Link>
-          {navCategories.map((category) => (
+          {categories.map((category) => (
             <Link
               key={category.id}
               href={`/category/${category.slug}`}

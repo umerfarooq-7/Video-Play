@@ -3,9 +3,9 @@ import { headers } from 'next/headers'
 import { ChevronRight } from 'lucide-react'
 import {
   listVideos,
+  getCategories,
   getFeaturedModels,
   getFeaturedPaysites,
-  getPopularTags,
 } from '@/lib/queries'
 import { VideoGrid } from '@/components/VideoCard'
 import { EntityAvatar } from '@/components/BrowseResults'
@@ -25,27 +25,25 @@ export default async function HomePage() {
   const region = isRegion(regionHeader) ? regionHeader : 'INT'
   const regionConfig = REGION_CONFIG[region]
 
-  const [trending, latest, models, paysites, tags] = await Promise.all([
+  const [trending, latest, models, paysites, categories] = await Promise.all([
     listVideos({ sort: 'views', perPage: 12, country }),
     listVideos({ sort: 'new', perPage: 24, country }),
     getFeaturedModels(24),
     getFeaturedPaysites(24),
-    getPopularTags(30),
+    getCategories(),
   ])
 
   return (
     <div className="space-y-6">
       {/*
-        Discovery strips: models, networks, tags.
+        Discovery strips: models, networks, categories.
 
         Deliberately compact and unlabelled. Each is visually self-explanatory
-        — faces, logos, hash-prefixed words — and a heading above each one
-        pushed the first video card most of a screen further down. Categories
-        are not repeated here; they already have their own rail in the header,
-        and duplicating them cost a whole section for no new information.
+        — faces, logos, short words — and a heading above each one pushed the
+        first video card most of a screen further down.
       */}
       {models.length > 0 && (
-        <Rail seeAllHref="/models" label="Models">
+        <Rail seeAllHref="/models" seeAllLabel="All models" label="Models">
           {models.map((model) => (
             <Link
               key={model.id}
@@ -62,7 +60,7 @@ export default async function HomePage() {
       )}
 
       {paysites.length > 0 && (
-        <Rail seeAllHref="/networks" label="Networks">
+        <Rail seeAllHref="/networks" seeAllLabel="All networks" label="Networks">
           {paysites.map((paysite) => (
             <Link
               key={paysite.id}
@@ -78,15 +76,19 @@ export default async function HomePage() {
         </Rail>
       )}
 
-      {tags.length > 0 && (
-        <Rail seeAllHref="/tags" label="Tags">
-          {tags.map((tag) => (
+      {/* Categories, in the slot tags used to occupy. Tags were dropped from
+          the home page: they overlapped heavily with categories and gave
+          visitors two competing ways to browse the same thing. Tag pages still
+          exist and are still linked from each watch page. */}
+      {categories.length > 0 && (
+        <Rail seeAllHref="/categories" seeAllLabel="All categories" label="Categories">
+          {categories.map((category) => (
             <Link
-              key={tag.id}
-              href={`/tag/${tag.slug}`}
+              key={category.id}
+              href={`/category/${category.slug}`}
               className="shrink-0 whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted hover:border-accent hover:text-accent"
             >
-              {tag.name}
+              {category.name}
             </Link>
           ))}
         </Rail>
@@ -125,23 +127,30 @@ export default async function HomePage() {
 function Rail({
   label,
   seeAllHref,
+  seeAllLabel,
   children,
 }: {
   label: string
   seeAllHref: string
+  seeAllLabel: string
   children: React.ReactNode
 }) {
   return (
-    <nav aria-label={label} className="flex items-center gap-3">
+    <nav aria-label={label} className="flex items-center">
+      {/* The "see all" link is the last item inside the scroller, not pinned
+          beside it. Pinned, it sat where the strip visually ended and read as
+          though the list stopped there — so people never scrolled past the
+          first few. Now the strip runs through everything and the link is what
+          you reach at the end of it. */}
       <div className="flex flex-1 items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
         {children}
+        <Link
+          href={seeAllHref}
+          className="shrink-0 whitespace-nowrap rounded-full border border-accent px-3 py-1 text-xs font-semibold text-accent hover:bg-accent hover:text-accent-contrast"
+        >
+          {seeAllLabel}
+        </Link>
       </div>
-      <Link
-        href={seeAllHref}
-        className="shrink-0 self-center text-xs font-medium text-accent hover:underline"
-      >
-        All
-      </Link>
     </nav>
   )
 }
