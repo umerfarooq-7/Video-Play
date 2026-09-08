@@ -750,7 +750,7 @@ async function failJob(job, error) {
 let running = true
 
 async function tick() {
-  const { data: job, error } = await supabase.rpc('claim_ingest_job', {
+  const { data, error } = await supabase.rpc('claim_ingest_job', {
     worker_id: WORKER_ID,
   })
 
@@ -758,7 +758,14 @@ async function tick() {
     log('claim failed:', error.message)
     return
   }
-  if (!job) return
+
+  // An empty queue can come back three ways: null, an empty array from a
+  // set-returning function, or — when a composite-returning function yields
+  // NULL — an object whose every column is null. That last one is truthy, so
+  // testing the object alone sends a job made of nulls into the pipeline on
+  // every idle poll. Key off the id instead.
+  const job = Array.isArray(data) ? data[0] : data
+  if (!job?.id) return
 
   try {
     await processJob(job)
