@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { CheckboxField, Field, TextareaField } from '@/components/form'
+import { MultiSelectField } from '@/components/MultiSelectField'
 import { MAX_CATEGORIES_PER_VIDEO } from '@/lib/constants'
 import type { Category, Model, Paysite } from '@/types/database'
 
@@ -139,19 +140,14 @@ export function VideoMetadataFields({
         </datalist>
       </div>
 
-      <Field
+      <MultiSelectField
         label="Models"
         name="models"
-        placeholder="Jane Doe, John Smith"
-        list="model-options"
-        hint="Comma separated. New names are added automatically."
+        options={models.map((model) => ({ id: model.id, name: model.name }))}
+        placeholder="Start typing a name…"
+        hint="Pick as many as appear in the video. A name that is not on the list yet is added automatically."
         errors={fieldErrors?.models}
       />
-      <datalist id="model-options">
-        {models.map((model) => (
-          <option key={model.id} value={model.name} />
-        ))}
-      </datalist>
 
       <Field
         label="Full movie duration"
