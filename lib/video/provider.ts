@@ -46,6 +46,12 @@ export interface VideoProvider {
     filename: string
     contentType: string
     sizeBytes: number
+    /**
+     * Moment the cover still should be taken from, chosen by the uploader.
+     * Providers that cut their own thumbnail during encoding use this; the
+     * rest fall back to whatever they pick themselves.
+     */
+    thumbnailTimeSeconds?: number
   }): Promise<UploadTarget>
 
   /**
@@ -180,15 +186,33 @@ class BunnyProvider implements VideoProvider {
     return key
   }
 
-  /** Create the Bunny video record and return its GUID. */
-  private async createVideo(title: string): Promise<string> {
+  /**
+   * Create the Bunny video record and return its GUID.
+   *
+   * `thumbnailTime` is the whole cover feature: Bunny cuts the main thumbnail
+   * from that moment while it encodes, so the uploader's choice costs no
+   * upload, no image processing and no second request. It can only be set at
+   * creation, which is why the choice is made before the file is sent.
+   */
+  private async createVideo(
+    title: string,
+    thumbnailTimeSeconds?: number,
+  ): Promise<string> {
+    const thumbnailTime =
+      thumbnailTimeSeconds !== undefined && Number.isFinite(thumbnailTimeSeconds)
+        ? Math.max(0, Math.round(thumbnailTimeSeconds * 1000))
+        : undefined
+
     const response = await fetch(`${BUNNY_API}/library/${this.libraryId}/videos`, {
       method: 'POST',
       headers: {
         AccessKey: this.apiKey,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ title: title.slice(0, 200) }),
+      body: JSON.stringify({
+        title: title.slice(0, 200),
+        ...(thumbnailTime !== undefined ? { thumbnailTime } : {}),
+      }),
     })
 
     if (!response.ok) {
@@ -214,8 +238,9 @@ class BunnyProvider implements VideoProvider {
   async createUploadTarget(input: {
     videoId: string
     filename: string
+    thumbnailTimeSeconds?: number
   }): Promise<UploadTarget> {
-    const guid = await this.createVideo(input.filename)
+    const guid = await this.createVideo(input.filename, input.thumbnailTimeSeconds)
 
     // Generous window: an 8 GB upload on a slow connection takes hours.
     const expiry = Date.now() + 24 * 60 * 60 * 1000

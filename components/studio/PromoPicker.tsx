@@ -1,11 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Loader2, Scissors, Check } from 'lucide-react'
 import { formatDuration } from '@/lib/format'
-
-/** Frames offered across the video. */
-const STRIP_FRAMES = 10
+import { STRIP_FRAMES, type VideoFrames } from '@/lib/studio/use-video-frames'
 
 /** How long each chosen scene contributes to the promo. */
 const SEGMENT_SECONDS = 3
@@ -14,42 +12,30 @@ const SEGMENT_SECONDS = 3
 const MAX_SEGMENTS = 10
 const MAX_TOTAL_SECONDS = 30
 
-interface Frame {
-  time: number
-  dataUrl: string
-}
-
-export interface PromoSelection {
-  segments: { start: number; end: number }[]
-  posterDataUrl: string | null
-}
-
 /**
  * Pick the promo from a file that has not been uploaded yet.
- *
- * Everything runs in the browser against the local file: an object URL feeds a
- * hidden <video> and frames are drawn onto a canvas. No upload, no server, no
- * CORS, and seeking is instant because the bytes are already on the machine.
  *
  * Several scenes can be chosen and are stitched into one preview. A single
  * continuous window only ever shows one moment of a video; a few short cuts
  * convey the whole thing in the same few seconds.
+ *
+ * The frames come from {@link useVideoFrames}, which the upload form owns so
+ * that this and the cover picker share a single scan of the file.
  */
 export function PromoPicker({
-  file,
-  onChange,
-}: {
-  file: File
-  onChange: (selection: PromoSelection | null) => void
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  frames,
+  duration,
+  scanning,
+  error,
+}: Pick<VideoFrames, 'frames' | 'duration' | 'scanning' | 'error'>) {
+  // null means the uploader has not touched the strip yet, which lets the
+  // default below stay a derivation instead of an effect that writes state.
+  const [chosen, setChosen] = useState<number[] | null>(null)
 
-  const [duration, setDuration] = useState(0)
-  const [frames, setFrames] = useState<Frame[]>([])
-  const [scanning, setScanning] = useState(false)
-  const [picked, setPicked] = useState<number[]>([])
-  const [error, setError] = useState<string | null>(null)
+  // Default to the first scene so someone who changes nothing still gets a
+  // promo rather than none at all.
+  const fallback = frames.length === STRIP_FRAMES ? [frames[0].time] : []
+  const picked = chosen ?? fallback
 
   const segments = picked
     .slice()
@@ -62,132 +48,21 @@ export function PromoPicker({
   const totalSeconds = segments.reduce((sum, s) => sum + (s.end - s.start), 0)
   const atLimit = picked.length >= MAX_SEGMENTS || totalSeconds >= MAX_TOTAL_SECONDS
 
-  // revokeObjectURL matters: without it the browser pins the whole file in
-  // memory until the tab closes.
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const url = URL.createObjectURL(file)
-    video.src = url
-
-    return () => {
-      video.removeAttribute('src')
-      video.load()
-      URL.revokeObjectURL(url)
-    }
-  }, [file])
-
-  const seekAndSettle = useCallback((video: HTMLVideoElement, time: number) => {
-    return new Promise<void>((resolve) => {
-      const done = () => {
-        video.removeEventListener('seeked', done)
-        // 'seeked' fires before the new frame is reliably painted in some
-        // browsers, and capturing early yields the previous frame.
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-      }
-      video.addEventListener('seeked', done)
-      video.currentTime = Math.max(0, Math.min(time, video.duration || 0))
-    })
-  }, [])
-
-  const capture = useCallback((width = 240): string | null => {
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas || !video.videoWidth) return null
-
-    const height = Math.round((video.videoHeight / video.videoWidth) * width)
-    canvas.width = width
-    canvas.height = height
-
-    const context = canvas.getContext('2d')
-    if (!context) return null
-
-    context.drawImage(video, 0, 0, width, height)
-    try {
-      return canvas.toDataURL('image/jpeg', 0.6)
-    } catch {
-      return null
-    }
-  }, [])
-
-  const buildStrip = useCallback(async () => {
-    const video = videoRef.current
-    if (!video || !video.duration || !Number.isFinite(video.duration)) return
-
-    setScanning(true)
-    const collected: Frame[] = []
-
-    try {
-      for (let i = 0; i < STRIP_FRAMES; i++) {
-        // Half-step offset: the opening frame of a video is very often black.
-        const time = ((i + 0.5) / STRIP_FRAMES) * video.duration
-        await seekAndSettle(video, time)
-        const dataUrl = capture()
-        if (dataUrl) collected.push({ time, dataUrl })
-        setFrames([...collected])
-      }
-    } finally {
-      setScanning(false)
-    }
-  }, [capture, seekAndSettle])
-
-  function onLoadedMetadata() {
-    const video = videoRef.current
-    if (!video) return
-
-    if (!Number.isFinite(video.duration) || video.duration <= 0) {
-      setError('Could not read that file. Try a different format.')
-      return
-    }
-
-    setDuration(video.duration)
-    void buildStrip()
-  }
-
   function toggle(time: number) {
-    setPicked((prev) => {
-      if (prev.includes(time)) return prev.filter((t) => t !== time)
-      if (prev.length >= MAX_SEGMENTS) return prev
-      if ((prev.length + 1) * SEGMENT_SECONDS > MAX_TOTAL_SECONDS) return prev
-      return [...prev, time]
+    // Update from the previous value rather than from `picked` in this
+    // render's closure: two clicks landing in one batch would otherwise both
+    // build on the same stale list and the first would be lost.
+    setChosen((prev) => {
+      const current = prev ?? fallback
+      if (current.includes(time)) return current.filter((t) => t !== time)
+      if (current.length >= MAX_SEGMENTS) return current
+      if ((current.length + 1) * SEGMENT_SECONDS > MAX_TOTAL_SECONDS) return current
+      return [...current, time]
     })
   }
-
-  // Default to the first scene so a user who changes nothing still gets a
-  // sensible promo rather than none at all.
-  useEffect(() => {
-    if (frames.length === STRIP_FRAMES && picked.length === 0) {
-      setPicked([frames[0].time])
-    }
-  }, [frames, picked.length])
-
-  // Report upward whenever the selection changes. The poster is the frame the
-  // promo opens on, which is the first thing a viewer sees on hover.
-  useEffect(() => {
-    if (segments.length === 0) {
-      onChange(null)
-      return
-    }
-    const first = frames.find((f) => f.time === segments[0].start)
-    onChange({ segments, posterDataUrl: first?.dataUrl ?? null })
-    // segments is derived from picked/duration; depending on those avoids an
-    // identity-change loop on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picked, duration, frames])
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-background p-3">
-      <canvas ref={canvasRef} className="hidden" aria-hidden />
-      <video
-        ref={videoRef}
-        preload="metadata"
-        muted
-        playsInline
-        onLoadedMetadata={onLoadedMetadata}
-        className="hidden"
-      />
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-xs font-semibold">
           <Scissors size={13} aria-hidden />

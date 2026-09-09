@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { UploadCloud, CheckCircle2 } from 'lucide-react'
 import { createUploadDraft, finalizeUpload } from '@/lib/studio/video-actions'
 import { VideoMetadataFields } from '@/components/studio/VideoMetadataFields'
-import { PromoPicker, type PromoSelection } from '@/components/studio/PromoPicker'
+import { PromoAndCoverPicker } from '@/components/studio/PromoAndCoverPicker'
 import { FormMessage } from '@/components/form'
 import { ACCEPTED_VIDEO_TYPES, MAX_UPLOAD_BYTES } from '@/lib/constants'
 import type { Category, Model, Paysite } from '@/types/database'
@@ -39,7 +39,6 @@ export function UploadForm({
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [file, setFile] = useState<File | null>(null)
-  const [promo, setPromo] = useState<PromoSelection | null>(null)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -131,7 +130,6 @@ export function UploadForm({
               setPhase('idle')
               setProgress(0)
               setFile(null)
-              setPromo(null)
             }}
             className="rounded-lg border border-border px-3.5 py-2 text-xs font-medium text-muted hover:bg-surface-raised"
           >
@@ -184,17 +182,24 @@ export function UploadForm({
           disabled={busy}
           onChange={(e) => {
             setFile(e.target.files?.[0] ?? null)
-            setPromo(null)
           }}
           className="sr-only"
         />
       </div>
 
-      {/* The promo is chosen before anything is uploaded, from the local file.
-          It comes directly after the file picker and before the details,
-          because deciding which part of the video represents it is what tells
-          you which categories actually apply. */}
-      {file && <PromoPicker file={file} onChange={setPromo} />}
+      {/* The promo and the cover are chosen before anything is uploaded, from
+          the local file. They come directly after the file picker and before
+          the details, because deciding which part of the video represents it
+          is what tells you which categories actually apply.
+
+          The key remounts the scan when a different file is chosen, so no
+          frames from the previous one can linger. */}
+      {file && (
+        <PromoAndCoverPicker
+          key={`${file.name}:${file.size}:${file.lastModified}`}
+          file={file}
+        />
+      )}
 
       <VideoMetadataFields
         categories={categories}

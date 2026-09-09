@@ -90,6 +90,9 @@ const metadataSchema = z.object({
   // Chosen in the browser before upload, from the local file.
   previewStartSeconds: z.coerce.number().min(0).optional(),
   previewEndSeconds: z.coerce.number().min(0).optional(),
+  // The moment the cover still is taken from. The provider cuts it during
+  // encoding, so this travels no further than the upload target.
+  thumbnailTimeSeconds: z.coerce.number().min(0).optional(),
   // JSON array of scenes stitched into the promo. Parsed and re-validated
   // here rather than trusted: the worker feeds these straight into an ffmpeg
   // filter graph, where a malformed entry becomes a broken command.
@@ -245,6 +248,7 @@ function readMetadata(formData: FormData) {
     previewStartSeconds: formData.get('previewStartSeconds') || undefined,
     previewEndSeconds: formData.get('previewEndSeconds') || undefined,
     previewSegments: formData.get('previewSegments') || undefined,
+    thumbnailTimeSeconds: formData.get('thumbnailTimeSeconds') || undefined,
     rightsAttested: formData.get('rightsAttested'),
     consentAttested: formData.get('consentAttested'),
   })
@@ -415,6 +419,7 @@ export async function createUploadDraft(
     filename,
     contentType,
     sizeBytes,
+    thumbnailTimeSeconds: parsed.data.thumbnailTimeSeconds,
   })
 
   await supabase
