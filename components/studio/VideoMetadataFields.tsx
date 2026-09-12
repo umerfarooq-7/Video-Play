@@ -82,12 +82,33 @@ const HEAT = [
   { value: 'softcore', label: 'Softcore' },
 ]
 
+/**
+ * Everything the form needs to reopen an existing video for editing. Absent
+ * on upload, where every field starts empty.
+ */
+export interface VideoMetadataInitial {
+  title: string
+  description: string | null
+  paysiteDomain: string
+  models: string[]
+  tags: string
+  categoryIds: string[]
+  fullDurationSeconds: number | null
+  contentOrientation: string
+  contentHeat: string
+  producedOn: string | null
+  projection: string
+  isExclusive: boolean
+  isSourceOnly: boolean
+}
+
 export function VideoMetadataFields({
   categories,
   paysites = [],
   models = [],
   fieldErrors,
   showSourceOnly = false,
+  initial,
 }: {
   categories: Category[]
   paysites?: Paysite[]
@@ -95,8 +116,14 @@ export function VideoMetadataFields({
   fieldErrors?: Record<string, string[]>
   /** Offer the "full-length source, not for publication" flag. */
   showSourceOnly?: boolean
+  /** Current values, when editing rather than uploading. */
+  initial?: VideoMetadataInitial
 }) {
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState(initial?.tags ?? '')
+
+  // On an edit the uploader already attested at upload; the boxes come back
+  // ticked so saving re-affirms rather than re-interrogates.
+  const editing = initial !== undefined
 
   return (
     <>
@@ -106,6 +133,7 @@ export function VideoMetadataFields({
         label="Title"
         name="title"
         required
+        defaultValue={initial?.title}
         placeholder="5–10 words"
         errors={fieldErrors?.title}
       />
@@ -115,6 +143,7 @@ export function VideoMetadataFields({
         name="description"
         rows={4}
         maxLength={5000}
+        defaultValue={initial?.description ?? undefined}
         hint="200–300 characters, 2–4 sentences. Searchable."
         errors={fieldErrors?.description}
       />
@@ -126,6 +155,7 @@ export function VideoMetadataFields({
           label="Paysite domain"
           name="paysiteDomain"
           required
+          defaultValue={initial?.paysiteDomain}
           placeholder="example.com"
           list="paysite-options"
           hint="Without www. Start typing for suggestions."
@@ -144,6 +174,7 @@ export function VideoMetadataFields({
         label="Models"
         name="models"
         options={models.map((model) => ({ id: model.id, name: model.name }))}
+        initialValues={initial?.models}
         placeholder="Start typing a name…"
         hint="Pick as many as appear in the video. A name that is not on the list yet is added automatically."
         errors={fieldErrors?.models}
@@ -153,6 +184,7 @@ export function VideoMetadataFields({
         label="Full movie duration"
         name="fullDurationSeconds"
         type="number"
+        defaultValue={initial?.fullDurationSeconds?.toString()}
         placeholder="0"
         hint="Length of the ORIGINAL movie in seconds, if you know it. 1 min = 60, 1 hour = 3600. Leave blank if unsure."
         errors={fieldErrors?.fullDurationSeconds}
@@ -162,7 +194,7 @@ export function VideoMetadataFields({
         legend="Content type"
         name="contentOrientation"
         options={ORIENTATIONS}
-        defaultValue="straight"
+        defaultValue={initial?.contentOrientation ?? 'straight'}
         errors={fieldErrors?.contentOrientation}
       />
 
@@ -170,7 +202,7 @@ export function VideoMetadataFields({
         legend="Explicitness"
         name="contentHeat"
         options={HEAT}
-        defaultValue="hardcore"
+        defaultValue={initial?.contentHeat ?? 'hardcore'}
         errors={fieldErrors?.contentHeat}
       />
 
@@ -178,6 +210,7 @@ export function VideoMetadataFields({
         label="Day of production"
         name="producedOn"
         type="date"
+        defaultValue={initial?.producedOn ?? undefined}
         hint="Optional. An approximate date is fine."
         errors={fieldErrors?.producedOn}
       />
@@ -189,7 +222,7 @@ export function VideoMetadataFields({
         <select
           id="projection"
           name="projection"
-          defaultValue="flat"
+          defaultValue={initial?.projection ?? 'flat'}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2 text-sm focus:border-accent focus:outline-none"
         >
           {PROJECTIONS.map((option) => (
@@ -205,7 +238,11 @@ export function VideoMetadataFields({
       </div>
 
       {categories.length > 0 && (
-        <CategoryPicker categories={categories} errors={fieldErrors?.categoryIds} />
+        <CategoryPicker
+          categories={categories}
+          errors={fieldErrors?.categoryIds}
+          initialSelected={initial?.categoryIds}
+        />
       )}
 
       <Field
@@ -218,12 +255,12 @@ export function VideoMetadataFields({
         errors={fieldErrors?.tags}
       />
 
-      <CheckboxField name="isExclusive">
+      <CheckboxField name="isExclusive" defaultChecked={initial?.isExclusive}>
         This content is exclusive to us.
       </CheckboxField>
 
       {showSourceOnly && (
-        <CheckboxField name="isSourceOnly">
+        <CheckboxField name="isSourceOnly" defaultChecked={initial?.isSourceOnly}>
           This is a full-length source, uploaded only so promos can be cut from
           it. It will never be published — only the promos you cut will be.
         </CheckboxField>
@@ -232,11 +269,19 @@ export function VideoMetadataFields({
       <div className="space-y-2 rounded-lg border border-border bg-background p-3">
         <p className="text-xs font-semibold">Required confirmations</p>
 
-        <CheckboxField name="rightsAttested" errors={fieldErrors?.rightsAttested}>
+        <CheckboxField
+          name="rightsAttested"
+          defaultChecked={editing}
+          errors={fieldErrors?.rightsAttested}
+        >
           I hold the distribution rights to this video.
         </CheckboxField>
 
-        <CheckboxField name="consentAttested" errors={fieldErrors?.consentAttested}>
+        <CheckboxField
+          name="consentAttested"
+          defaultChecked={editing}
+          errors={fieldErrors?.consentAttested}
+        >
           Every performer was at least 18 years old at the time of production and
           consented to this being published.
         </CheckboxField>
@@ -371,11 +416,13 @@ function RadioRow({
 function CategoryPicker({
   categories,
   errors,
+  initialSelected = [],
 }: {
   categories: Category[]
   errors?: string[]
+  initialSelected?: string[]
 }) {
-  const [selected, setSelected] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>(initialSelected)
   const atLimit = selected.length >= MAX_CATEGORIES_PER_VIDEO
   const hasError = !!errors?.length
 

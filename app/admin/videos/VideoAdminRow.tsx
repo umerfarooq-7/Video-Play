@@ -62,6 +62,13 @@ export function VideoAdminRow({
         </form>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/admin/videos/${videoId}/edit`}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-raised"
+          >
+            Edit
+          </Link>
+
           {hasMedia && (
             <Link
               href={`/watch/${slug}`}

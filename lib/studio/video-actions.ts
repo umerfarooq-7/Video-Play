@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireUploader } from '@/lib/auth/guards'
+import { requireProfile, requireUploader } from '@/lib/auth/guards'
 import { getVideoProvider } from '@/lib/video/provider'
 import { validateRemoteUrl, probeRemoteUrl, UnsafeUrlError } from '@/lib/video/remote-url'
 import { slugify } from '@/lib/format'
@@ -782,6 +782,90 @@ export async function submitForReview(
 
   revalidatePath('/studio/videos')
   return { success: 'Sent to moderators for review.' }
+}
+
+/**
+ * Edit a video's details after it has been uploaded.
+ *
+ * Staff may edit any video; an uploader only their own. Two things are left
+ * alone on purpose:
+ *
+ *   status — a moderator's call, and the guard_video_status_transitions
+ *            trigger would refuse it here anyway.
+ *   slug   — a published video's URL is already out in the world, so
+ *            retitling must not break every link to it.
+ */
+export async function updateVideoDetails(
+  _prev: StudioState,
+  formData: FormData,
+): Promise<StudioState> {
+  const videoId = String(formData.get('videoId') ?? '')
+  if (!z.uuid().safeParse(videoId).success) {
+    return { error: 'Invalid video reference.' }
+  }
+
+  const profile = await requireProfile('/studio/videos')
+  const isStaff = profile.role === 'moderator' || profile.role === 'admin'
+
+  if (!isStaff && profile.uploader_status !== 'approved') {
+    return { error: 'Only approved uploaders can edit a video.' }
+  }
+
+  const parsed = readMetadata(formData)
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const supabase = await createClient()
+  const paysiteId = await resolvePaysite(parsed.data.paysiteDomain, profile.id)
+
+  // Scope the write to the caller's own rows unless they are staff. RLS
+  // enforces the same rule, but filtering here turns a forbidden edit into a
+  // clear "not found" instead of a silent no-op.
+  let query = supabase
+    .from('videos')
+    .update({
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+      projection: parsed.data.projection,
+      paysite_id: paysiteId,
+      content_orientation: parsed.data.contentOrientation,
+      content_heat: parsed.data.contentHeat,
+      is_exclusive: parsed.data.isExclusive ?? false,
+      produced_on: parsed.data.producedOn || null,
+      full_duration_seconds: parsed.data.fullDurationSeconds ?? null,
+      is_source_only: formData.get('isSourceOnly') === 'on',
+    })
+    .eq('id', videoId)
+
+  if (!isStaff) query = query.eq('owner_id', profile.id)
+
+  const { data: video, error } = await query.select('id, slug').single()
+
+  if (error || !video) {
+    return { error: error?.message ?? 'That video could not be found.' }
+  }
+
+  // Links are replaced wholesale rather than diffed: the form submits the
+  // complete set every time, so anything still attached that is not in it was
+  // removed by the editor.
+  await supabase.from('video_categories').delete().eq('video_id', videoId)
+  await supabase.from('video_tags').delete().eq('video_id', videoId)
+  await supabase.from('video_models').delete().eq('video_id', videoId)
+
+  await attachTaxonomy(
+    videoId,
+    parsed.data.categoryIds ?? [],
+    parseTags(parsed.data.tags),
+  )
+  await attachModels(videoId, parsed.data.models, profile.id)
+
+  revalidatePath('/studio/videos')
+  revalidatePath('/admin/videos')
+  revalidatePath(`/watch/${video.slug}`)
+  revalidatePath('/')
+
+  return { success: 'Changes saved.' }
 }
 
 export async function deleteVideo(

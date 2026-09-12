@@ -61,6 +61,13 @@ export function VideoRowActions({
             </form>
           )}
 
+          <Link
+            href={`/studio/videos/${videoId}/edit`}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-raised"
+          >
+            Edit
+          </Link>
+
           {hasMedia && (
             <Link
               href={`/watch/${slug}`}

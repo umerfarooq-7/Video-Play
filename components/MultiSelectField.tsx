@@ -30,6 +30,7 @@ export function MultiSelectField({
   placeholder,
   max = 20,
   allowNew = true,
+  initialValues = [],
 }: {
   label: string
   name: string
@@ -40,8 +41,10 @@ export function MultiSelectField({
   max?: number
   /** Accept a typed value that matches nothing in `options`. */
   allowNew?: boolean
+  /** Values already chosen, for editing an existing record. */
+  initialValues?: string[]
 }) {
-  const [selected, setSelected] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>(initialValues)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
