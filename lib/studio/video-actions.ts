@@ -45,11 +45,11 @@ const metadataSchema = z.object({
     .max(200, { error: 'Titles are limited to 200 characters.' }),
   description: z.string().trim().max(5000).optional(),
   projection: z.enum(PROJECTIONS as [VideoProjection, ...VideoProjection[]]),
+  // No product limit here — a video may sit in as many categories as apply.
+  // The bound only stops an absurd payload from turning into that many rows.
   categoryIds: z
     .array(z.uuid())
-    .max(MAX_CATEGORIES_PER_VIDEO, {
-      error: `Pick at most ${MAX_CATEGORIES_PER_VIDEO} categories.`,
-    })
+    .max(MAX_CATEGORIES_PER_VIDEO, { error: 'Too many categories submitted.' })
     .optional(),
   tags: z.string().trim().max(500).optional(),
 

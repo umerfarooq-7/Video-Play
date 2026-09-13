@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { CheckboxField, Field, TextareaField } from '@/components/form'
 import { MultiSelectField } from '@/components/MultiSelectField'
-import { MAX_CATEGORIES_PER_VIDEO } from '@/lib/constants'
 import type { Category, Model, Paysite } from '@/types/database'
 
 /**
@@ -408,10 +407,10 @@ function RadioRow({
 /**
  * Category checkboxes with a live count.
  *
- * The limit is enforced here as well as in the schema. Letting someone tick
- * eight boxes and only telling them after they press submit is the worst of
- * both worlds — especially since the error renders at the top of a long form,
- * off screen from the button they just pressed.
+ * There is no cap: a video belongs in every category that genuinely describes
+ * it, and the more of them are ticked the more ways a viewer can find it. The
+ * count is kept only because it is useful to see at a glance on a list this
+ * long.
  */
 function CategoryPicker({
   categories,
@@ -423,36 +422,31 @@ function CategoryPicker({
   initialSelected?: string[]
 }) {
   const [selected, setSelected] = useState<string[]>(initialSelected)
-  const atLimit = selected.length >= MAX_CATEGORIES_PER_VIDEO
   const hasError = !!errors?.length
 
   return (
     <fieldset>
       <legend className="text-xs font-medium">
         Categories{' '}
-        <span className={atLimit ? 'text-accent' : 'text-muted'}>
-          ({selected.length} of {MAX_CATEGORIES_PER_VIDEO})
+        <span className="text-muted">
+          ({selected.length} selected)
         </span>
       </legend>
 
       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
         {categories.map((category) => {
           const checked = selected.includes(category.id)
-          const disabled = !checked && atLimit
 
           return (
             <label
               key={category.id}
-              className={`flex items-center gap-1.5 text-xs ${
-                disabled ? 'cursor-not-allowed text-muted/40' : 'cursor-pointer text-muted'
-              }`}
+              className="flex cursor-pointer items-center gap-1.5 text-xs text-muted"
             >
               <input
                 type="checkbox"
                 name="categoryIds"
                 value={category.id}
                 checked={checked}
-                disabled={disabled}
                 onChange={(e) =>
                   setSelected((prev) =>
                     e.target.checked
@@ -467,12 +461,6 @@ function CategoryPicker({
           )
         })}
       </div>
-
-      {atLimit && !hasError && (
-        <p className="mt-1 text-xs text-accent">
-          Limit reached. Untick one to choose a different category.
-        </p>
-      )}
 
       {hasError && <p className="mt-1 text-xs text-danger">{errors[0]}</p>}
     </fieldset>

@@ -28,11 +28,15 @@ export const ACCEPTED_VIDEO_TYPES = [
 export const MAX_CLIP_SECONDS = 600
 
 /**
- * How many categories one video may sit in. Shared by the validation schema
- * and the picker UI so the limit shown and the limit enforced cannot drift —
- * they did once, and the result was a form that silently refused to submit.
+ * Upper bound on how many categories may be submitted for one video.
+ *
+ * This is a safety rail on an untrusted POST, not a product rule: an uploader
+ * is meant to be able to tick every category that genuinely applies, and the
+ * picker offers no limit at all. Keep it comfortably above the number of
+ * categories the site actually has, or it turns back into the restriction it
+ * replaced.
  */
-export const MAX_CATEGORIES_PER_VIDEO = 5
+export const MAX_CATEGORIES_PER_VIDEO = 200
 
 /**
  * Longest hover preview. Mirrors the preview_window_valid CHECK on videos.
