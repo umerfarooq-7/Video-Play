@@ -65,6 +65,9 @@ export type Paysite = {
   site_url: string | null
   is_featured: boolean
   video_count: number
+  promo_url: string | null
+  offer_text: string | null
+  download_text: string | null
 }
 
 export type Model = {

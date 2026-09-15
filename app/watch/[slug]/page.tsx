@@ -13,6 +13,7 @@ import { VideoGrid } from '@/components/VideoCard'
 import { EntityAvatar } from '@/components/BrowseResults'
 import { WatchActions } from './WatchActions'
 import { ViewCounter } from './ViewCounter'
+import { NetworkOfferBar, NetworkDownloadLink } from './NetworkPromo'
 import type { Video, VideoProjection } from '@/types/database'
 
 type WatchRow = Video & {
@@ -37,6 +38,9 @@ type WatchRow = Video & {
     name: string
     domain: string
     logo_url: string | null
+    promo_url: string | null
+    offer_text: string | null
+    download_text: string | null
   } | null
 }
 
@@ -49,7 +53,7 @@ async function loadVideo(slug: string) {
       `
       *,
       owner:profiles!videos_owner_id_fkey ( id, username, display_name, avatar_url ),
-      paysite:paysites!videos_paysite_id_fkey ( id, name, domain, logo_url ),
+      paysite:paysites!videos_paysite_id_fkey ( id, name, domain, logo_url, promo_url, offer_text, download_text ),
       video_categories ( categories ( id, slug, name ) ),
       video_tags ( tags ( id, slug, name ) ),
       video_models ( models ( id, slug, name, avatar_url ) )
@@ -172,6 +176,8 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
           </p>
         )}
 
+        {video.paysite && <NetworkOfferBar network={video.paysite} />}
+
         {playbackUrl ? (
           <Player
             src={playbackUrl}
@@ -187,6 +193,13 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
               </p>
             </div>
           </div>
+        )}
+
+        {video.paysite && (
+          <NetworkDownloadLink
+            network={video.paysite}
+            fullDurationSeconds={video.full_duration_seconds}
+          />
         )}
 
         <div>

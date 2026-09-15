@@ -483,6 +483,7 @@ create trigger video_tags_recount
   after insert or delete on video_tags
   for each row execute function tags_recount();
 
+
 -- ///////////////// 0002_pipeline_and_moderation.sql /////////////////
 
 -- ============================================================================
@@ -795,6 +796,7 @@ create table if not exists audit_log (
 
 create index if not exists audit_log_entity_idx on audit_log(entity_type, entity_id, created_at desc);
 create index if not exists audit_log_actor_idx on audit_log(actor_id, created_at desc);
+
 
 -- ///////////////// 0003_rls.sql /////////////////
 
@@ -1166,6 +1168,7 @@ drop policy if exists audit_log_admin_read on audit_log;
 create policy audit_log_admin_read on audit_log
   for select using (is_admin());
 
+
 -- ///////////////// 0004_seed.sql /////////////////
 
 -- ============================================================================
@@ -1213,6 +1216,7 @@ on conflict (slug) do nothing;
 --
 -- Everything else in the admin dashboard is reachable once one admin exists.
 -- ---------------------------------------------------------------------------
+
 
 -- ///////////////// 0005_promo_metadata.sql /////////////////
 
@@ -1434,6 +1438,7 @@ create trigger video_models_search_after_write
   after insert or delete on video_models
   for each row execute function video_model_search_trigger();
 
+
 -- ///////////////// 0006_discovery.sql /////////////////
 
 -- ============================================================================
@@ -1536,6 +1541,7 @@ drop policy if exists models_admin_delete on models;
 create policy models_admin_delete on models
   for delete using (is_admin());
 
+
 -- ///////////////// 0007_grants.sql /////////////////
 
 -- ============================================================================
@@ -1599,6 +1605,7 @@ begin
 end
 $do$;
 
+
 -- ///////////////// 0008_promo_window.sql /////////////////
 
 -- ============================================================================
@@ -1649,6 +1656,7 @@ alter table ingest_jobs
 create index if not exists ingest_jobs_preview_idx
   on ingest_jobs(is_preview, status)
   where status in ('queued', 'running');
+
 
 -- ///////////////// 0009_promo_segments.sql /////////////////
 
@@ -1712,3 +1720,46 @@ do $do$ begin
     add constraint preview_segments_shape check (preview_segments_valid(preview_segments));
 exception when duplicate_object then null;
 end $do$;
+
+
+-- ///////////////// 0010_network_promo.sql /////////////////
+
+-- ============================================================================
+-- 0010_network_promo.sql
+--
+-- Per-network promotion shown on that network's watch pages: an offer bar
+-- above the video and a "download the full movie" link beneath it, both
+-- pointing at a join link the admin sets on the network.
+--
+-- Additive and idempotent.
+-- ============================================================================
+
+alter table paysites
+  -- Where both the offer bar and the download link send the viewer.
+  add column if not exists promo_url     text,
+  -- Offer bar text, e.g. "Exclusive offer! Monthly membership now only $17.95".
+  -- No bar is shown when this is empty.
+  add column if not exists offer_text    text,
+  -- Text of the link beneath the player. Falls back to a default when empty.
+  add column if not exists download_text text;
+
+-- These are rendered straight into href attributes on public pages, so the
+-- scheme is pinned here as well as in the admin form: a javascript: URL would
+-- run in every viewer's browser.
+do $do$ begin
+  alter table paysites
+    add constraint paysite_promo_url_http
+    check (promo_url is null or promo_url ~* '^https?://');
+exception when duplicate_object then null;
+end $do$;
+
+do $do$ begin
+  alter table paysites
+    add constraint paysite_promo_text_length
+    check (
+      (offer_text is null or char_length(offer_text) <= 200)
+      and (download_text is null or char_length(download_text) <= 200)
+    );
+exception when duplicate_object then null;
+end $do$;
+

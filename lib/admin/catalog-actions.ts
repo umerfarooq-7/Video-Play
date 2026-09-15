@@ -45,6 +45,16 @@ const paysiteSchema = z.object({
   description: z.string().trim().max(500).optional(),
   logoUrl: imageUrl,
   isFeatured: z.boolean().optional(),
+  // Rendered as a link on every watch page for this network. z.url() alone
+  // accepts javascript: URLs, so the scheme is checked explicitly.
+  promoUrl: z
+    .union([z.url(), z.literal('')])
+    .optional()
+    .refine((v) => !v || /^https?:\/\//i.test(v), {
+      error: 'The link must start with http:// or https://',
+    }),
+  offerText: z.string().trim().max(200).optional(),
+  downloadText: z.string().trim().max(200).optional(),
 })
 
 function readPaysite(formData: FormData) {
@@ -56,6 +66,9 @@ function readPaysite(formData: FormData) {
     description: formData.get('description') || undefined,
     logoUrl: formData.get('logoUrl') || undefined,
     isFeatured: formData.get('isFeatured') === 'on',
+    promoUrl: formData.get('promoUrl') || undefined,
+    offerText: formData.get('offerText') || undefined,
+    downloadText: formData.get('downloadText') || undefined,
   })
 }
 
@@ -71,7 +84,18 @@ export async function savePaysite(
   }
 
   const supabase = await createClient()
-  const { id, name, domain, siteUrl, description, logoUrl, isFeatured } = parsed.data
+  const {
+    id,
+    name,
+    domain,
+    siteUrl,
+    description,
+    logoUrl,
+    isFeatured,
+    promoUrl,
+    offerText,
+    downloadText,
+  } = parsed.data
 
   const values = {
     name,
@@ -80,6 +104,9 @@ export async function savePaysite(
     description: description || null,
     logo_url: logoUrl || null,
     is_featured: isFeatured ?? false,
+    promo_url: promoUrl || null,
+    offer_text: offerText || null,
+    download_text: downloadText || null,
     // Anything an admin touches is, by definition, reviewed.
     is_approved: true,
   }

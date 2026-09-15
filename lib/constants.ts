@@ -46,3 +46,10 @@ export const MAX_PREVIEW_SECONDS = 30
 
 /** Scenes that may be stitched into one hover promo. Mirrors the DB CHECK. */
 export const MAX_PREVIEW_SEGMENTS = 10
+
+/**
+ * Link text beneath the player on a network's videos when the admin has set a
+ * join link but no wording of their own. `{duration}` is replaced with the
+ * full movie's length when the video records one.
+ */
+export const DEFAULT_DOWNLOAD_TEXT = 'Click Here To Download Full Length Movie'

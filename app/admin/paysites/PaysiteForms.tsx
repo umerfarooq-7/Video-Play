@@ -14,6 +14,7 @@ import {
   TextareaField,
 } from '@/components/form'
 import { EntityAvatar } from '@/components/BrowseResults'
+import { DEFAULT_DOWNLOAD_TEXT } from '@/lib/constants'
 import type { Paysite } from '@/types/database'
 
 /** Shared field set, so the add and edit forms cannot drift apart. */
@@ -77,6 +78,39 @@ function PaysiteFields({
       <CheckboxField name="isFeatured" defaultChecked={paysite?.is_featured}>
         Feature on the home page (shown before non-featured networks).
       </CheckboxField>
+
+      {/* Shown on every watch page for this network's videos. */}
+      <fieldset className="space-y-3 rounded-lg border border-border bg-background p-3">
+        <legend className="px-1 text-xs font-semibold">Promotion on video pages</legend>
+
+        <Field
+          label="Join / download link"
+          name="promoUrl"
+          type="url"
+          defaultValue={paysite?.promo_url ?? ''}
+          placeholder="https://join.example.com/?aff=123"
+          hint="Where the offer bar and the download link send viewers. Leave empty to show neither."
+          errors={fieldErrors?.promoUrl}
+        />
+
+        <Field
+          label="Offer bar text"
+          name="offerText"
+          defaultValue={paysite?.offer_text ?? ''}
+          placeholder="Exclusive offer! Monthly membership $29.95 now only $17.95"
+          hint="Green bar above the video. Leave empty for no bar."
+          errors={fieldErrors?.offerText}
+        />
+
+        <Field
+          label="Download link text"
+          name="downloadText"
+          defaultValue={paysite?.download_text ?? ''}
+          placeholder={DEFAULT_DOWNLOAD_TEXT}
+          hint="Bold blue link below the video. Empty uses the placeholder text. Write {duration} to insert the full movie length, if the video has one."
+          errors={fieldErrors?.downloadText}
+        />
+      </fieldset>
     </>
   )
 }
