@@ -39,10 +39,10 @@ export function NetworkOfferBar({ network }: { network: NetworkPromoSettings }) 
     <a
       href={url}
       {...OUTBOUND}
-      className="flex items-center justify-between gap-3 rounded-lg bg-green-700 px-3 py-2 text-sm text-white hover:bg-green-800"
+      className="flex items-center justify-between gap-3 rounded-lg bg-green-700 px-4 py-3 text-base font-bold text-white hover:bg-green-800 sm:text-lg"
     >
       <span className="min-w-0">{text}</span>
-      <span className="shrink-0 font-bold underline underline-offset-2">Join now</span>
+      <span className="shrink-0 font-extrabold underline underline-offset-2">Join now</span>
     </a>
   )
 }
@@ -65,11 +65,11 @@ export function NetworkDownloadLink({
   const text = template.replaceAll('{duration}', duration).replace(/\s{2,}/g, ' ').trim()
 
   return (
-    <p className="text-center">
+    <p className="py-1 text-center">
       <a
         href={url}
         {...OUTBOUND}
-        className="text-base font-bold text-accent underline underline-offset-2 hover:text-accent-hover"
+        className="text-xl font-extrabold leading-snug text-accent underline underline-offset-4 hover:text-accent-hover sm:text-2xl"
       >
         {text}
       </a>
