@@ -25,13 +25,8 @@ export default async function UploadPage() {
 
       <div className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted">
         <strong className="text-foreground">Promoting a full-length movie?</strong>{' '}
-        Upload it here and tick{' '}
-        <span className="text-foreground">&ldquo;full-length source&rdquo;</span> at the
-        bottom, then use the{' '}
-        <a href="/studio/clips" className="text-accent hover:underline">
-          clip tool
-        </a>{' '}
-        to cut a short promo from it. Only the promo gets published.
+        Choose the movie file, then mark the scenes you want in the promo. Only those
+        scenes are cut out and uploaded — the full movie never leaves your computer.
       </div>
 
       <UploadForm categories={categories} paysites={paysites} models={models} />

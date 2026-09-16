@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Image as ImageIcon, Loader2 } from 'lucide-react'
 import { formatDuration } from '@/lib/format'
 import { STRIP_FRAMES, type VideoFrames } from '@/lib/studio/use-video-frames'
+import type { Scene } from '@/lib/studio/cut-scenes'
 
 /**
  * Choose which moment of the video becomes its cover image.
@@ -18,7 +19,11 @@ export function CoverPicker({
   duration,
   scanning,
   captureAt,
-}: Pick<VideoFrames, 'frames' | 'duration' | 'scanning' | 'captureAt'>) {
+  scenes = [],
+}: Pick<VideoFrames, 'frames' | 'duration' | 'scanning' | 'captureAt'> & {
+  /** Promo scenes. Everything outside them is cut away before upload. */
+  scenes?: Scene[]
+}) {
   // null means untouched, so the default below is a derivation rather than an
   // effect that writes state.
   const [chosen, setChosen] = useState<number | null>(null)
@@ -27,7 +32,15 @@ export function CoverPicker({
   // Default to the middle of the video. The opening seconds are usually a
   // title card or a black frame, which makes a poor cover.
   const middle = frames.length >= STRIP_FRAMES ? frames[Math.floor(frames.length / 2)] : null
-  const time = chosen ?? middle?.time ?? null
+  // With scenes chosen, only a moment inside one survives the cut, so the
+  // default moves to the middle of the first scene.
+  const firstScene = scenes[0]
+  const fallback = firstScene
+    ? firstScene.start + (firstScene.end - firstScene.start) / 2
+    : (middle?.time ?? null)
+  const time = chosen ?? fallback
+  const outsideScenes =
+    time !== null && scenes.length > 0 && !scenes.some((s) => time >= s.start && time < s.end)
 
   // Show the sharper capture once it lands; until then the strip frame for
   // this moment stands in, so clicking never looks like it did nothing.
@@ -133,6 +146,13 @@ export function CoverPicker({
             )
           })}
         </div>
+      )}
+
+      {outsideScenes && (
+        <p className="text-xs text-warning">
+          This moment is not inside any promo scene, so it will not be in the uploaded
+          video. Pick a moment within a scene, or the cover is chosen automatically.
+        </p>
       )}
 
       {/* Submitted with the form. Empty means "let the provider choose". */}

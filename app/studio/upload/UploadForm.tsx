@@ -10,12 +10,14 @@ import { FormMessage } from '@/components/form'
 import { ACCEPTED_VIDEO_TYPES, MAX_UPLOAD_BYTES } from '@/lib/constants'
 import type { Category, Model, Paysite } from '@/types/database'
 
-type Phase = 'idle' | 'creating' | 'uploading' | 'finalizing' | 'done'
+type Phase = 'idle' | 'cutting' | 'creating' | 'uploading' | 'finalizing' | 'done'
 
 /**
- * Three-step upload, driven manually rather than through useActionState,
- * because the middle step is a raw byte transfer that has to report progress.
+ * Upload, driven manually rather than through useActionState, because the
+ * byte transfer has to report progress.
  *
+ *   0. cutScenes          — in the browser; joins the chosen scenes so only the
+ *                           promo is uploaded, never the full movie
  *   1. createUploadDraft  — server action; makes the row, returns a target
  *   2. PUT the file       — straight to the provider, never through an action
  *   3. finalizeUpload     — server action; queues the transcode job
@@ -51,16 +53,56 @@ export function UploadForm({
       return
     }
 
-    if (file.size > MAX_UPLOAD_BYTES) {
+    const formData = new FormData(event.currentTarget)
+
+    // --- 0. Cut the promo --------------------------------------------------
+    // The chosen scenes are cut out of the local file and joined here, so only
+    // the promo is uploaded. With no scenes the file goes up as it is.
+    const scenes = readScenes(formData.get('promoScenes'))
+    formData.delete('promoScenes')
+    let upload: File = file
+
+    if (scenes.length > 0) {
+      setPhase('cutting')
+      setProgress(0)
+      try {
+        const { cutScenes, mapToCut } = await import('@/lib/studio/cut-scenes')
+        const cut = await cutScenes(file, scenes, (fraction) =>
+          setProgress(Math.round(fraction * 100)),
+        )
+        upload = cut.file
+
+        // The cover was picked on the source timeline; carry it onto the
+        // promo's. A moment that was cut away is left for the provider to choose.
+        const cover = Number(formData.get('thumbnailTimeSeconds'))
+        const mapped = Number.isFinite(cover) ? mapToCut(cover, cut.segments) : null
+        if (mapped === null) formData.delete('thumbnailTimeSeconds')
+        else formData.set('thumbnailTimeSeconds', mapped.toFixed(2))
+
+        // What is uploaded is the promo itself, never a source kept for cutting.
+        formData.delete('isSourceOnly')
+      } catch (cutError) {
+        setPhase('idle')
+        setError(
+          'Could not cut the scenes from this file' +
+            (cutError instanceof Error ? ': ' + cutError.message : '.') +
+            ' MP4 and MOV files work best. To upload it without cutting, remove all scenes.',
+        )
+        revealFirstError()
+        return
+      }
+    }
+
+    if (upload.size > MAX_UPLOAD_BYTES) {
+      setPhase('idle')
       setError('That file is larger than the 8 GB limit.')
       revealFirstError()
       return
     }
 
-    const formData = new FormData(event.currentTarget)
-    formData.set('filename', file.name)
-    formData.set('contentType', file.type || 'video/mp4')
-    formData.set('sizeBytes', String(file.size))
+    formData.set('filename', upload.name)
+    formData.set('contentType', upload.type || 'video/mp4')
+    formData.set('sizeBytes', String(upload.size))
 
     // --- 1. Create the draft ---------------------------------------------
     setPhase('creating')
@@ -83,7 +125,7 @@ export function UploadForm({
     // --- 2. Send the bytes -------------------------------------------------
     setPhase('uploading')
     try {
-      await sendFile(draft.upload, file, setProgress)
+      await sendFile(draft.upload, upload, setProgress)
     } catch (uploadError) {
       setPhase('idle')
       setError(
@@ -209,10 +251,10 @@ export function UploadForm({
         showSourceOnly
       />
 
-      {phase === 'uploading' && (
+      {(phase === 'uploading' || phase === 'cutting') && (
         <div>
           <div className="flex justify-between text-xs text-muted">
-            <span>Uploading…</span>
+            <span>{phase === 'cutting' ? 'Cutting scenes…' : 'Uploading…'}</span>
             <span className="tabular-nums">{progress}%</span>
           </div>
           <div
@@ -235,6 +277,7 @@ export function UploadForm({
         disabled={busy}
         className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
+        {phase === 'cutting' && `Cutting scenes ${progress}%`}
         {phase === 'creating' && 'Preparing…'}
         {phase === 'uploading' && `Uploading ${progress}%`}
         {phase === 'finalizing' && 'Queueing…'}
@@ -378,4 +421,23 @@ function putWithProgress(
 
     request.send(file)
   })
+}
+
+/** The scenes the picker wrote into the form, validated rather than trusted. */
+function readScenes(raw: FormDataEntryValue | null): { start: number; end: number }[] {
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (s): s is { start: number; end: number } =>
+        !!s &&
+        typeof s === 'object' &&
+        Number.isFinite((s as { start?: unknown }).start) &&
+        Number.isFinite((s as { end?: unknown }).end) &&
+        (s as { end: number }).end > (s as { start: number }).start,
+    )
+  } catch {
+    return []
+  }
 }
