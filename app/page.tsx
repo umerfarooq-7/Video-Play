@@ -8,6 +8,7 @@ import {
   getFeaturedPaysites,
 } from '@/lib/queries'
 import { VideoGrid } from '@/components/VideoCard'
+import { InfiniteVideoGrid } from '@/components/InfiniteVideoGrid'
 import { EntityAvatar } from '@/components/BrowseResults'
 import { REGION_CONFIG, isRegion } from '@/lib/geo'
 import { COUNTRY_HEADER, REGION_HEADER } from '@/lib/constants'
@@ -15,6 +16,9 @@ import { COUNTRY_HEADER, REGION_HEADER } from '@/lib/constants'
 export const metadata = {
   title: 'X PORN HOUSE — Video streaming',
 }
+
+/** Videos per batch in the endless "Recently added" grid. */
+const LATEST_PER_PAGE = 24
 
 export default async function HomePage() {
   // proxy.ts resolves these once per request and forwards them as headers, so
@@ -27,7 +31,7 @@ export default async function HomePage() {
 
   const [trending, latest, models, paysites, categories] = await Promise.all([
     listVideos({ sort: 'views', perPage: 12, country }),
-    listVideos({ sort: 'new', perPage: 24, country }),
+    listVideos({ sort: 'new', perPage: LATEST_PER_PAGE, country }),
     getFeaturedModels(24),
     getFeaturedPaysites(24),
     getCategories(),
@@ -110,9 +114,17 @@ export default async function HomePage() {
         />
       </section>
 
+      {/* The whole library is reachable from here by scrolling, rather than
+          stopping at one screenful with a link away to find the rest. */}
       <section>
         <SectionHeading title="Recently added" href="/search?sort=new" />
-        <VideoGrid videos={latest.videos} emptyMessage="No videos yet." />
+        <InfiniteVideoGrid
+          initial={latest.videos}
+          total={latest.total}
+          perPage={LATEST_PER_PAGE}
+          sort="new"
+          emptyMessage="No videos yet."
+        />
       </section>
     </div>
   )
