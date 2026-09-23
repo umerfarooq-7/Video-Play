@@ -74,6 +74,39 @@ const metadataSchema = z.object({
       error: 'Enter a bare domain, for example: example.com',
     }),
   models: z.string().trim().max(600).optional(),
+  // Photos for performer names that do not exist yet, as JSON [{name,value}].
+  // The links are stored and later rendered into an <img src>, so only http(s)
+  // is accepted: `javascript:` and `data:` URLs are an injection vector. A
+  // rejected link is reported rather than dropped, otherwise the uploader
+  // would be told the photo was saved when it was not.
+  modelImages: z
+    .string()
+    .max(4000)
+    .optional()
+    .transform((raw) => {
+      if (!raw) return []
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return []
+
+        return parsed
+          .filter(
+            (entry): entry is { name: string; value: string } =>
+              !!entry &&
+              typeof entry === 'object' &&
+              typeof (entry as { name?: unknown }).name === 'string' &&
+              typeof (entry as { value?: unknown }).value === 'string',
+          )
+          .map((entry) => ({ name: entry.name.trim(), value: entry.value.trim() }))
+          .filter((entry) => entry.name !== '' && entry.value !== '')
+          .slice(0, 20)
+      } catch {
+        return []
+      }
+    })
+    .refine((entries) => entries.every((e) => /^https?:\/\/\S+$/.test(e.value) && e.value.length <= 500), {
+      error: 'Photo links must start with http:// or https://',
+    }),
   fullDurationSeconds: z.coerce
     .number()
     .int()
@@ -240,6 +273,7 @@ function readMetadata(formData: FormData) {
     tags: formData.get('tags') || undefined,
     paysiteDomain: formData.get('paysiteDomain'),
     models: formData.get('models') || undefined,
+    modelImages: formData.get('modelImages') || undefined,
     fullDurationSeconds: formData.get('fullDurationSeconds') || undefined,
     isExclusive: formData.get('isExclusive') === 'on',
     contentOrientation: formData.get('contentOrientation') || 'straight',
@@ -300,8 +334,20 @@ async function resolvePaysite(domain: string, userId: string): Promise<string | 
   return created?.id ?? null
 }
 
-/** Resolve comma-separated performer names to model rows, creating new ones. */
-async function attachModels(videoId: string, raw: string | undefined, userId: string) {
+/**
+ * Resolve comma-separated performer names to model rows, creating new ones.
+ *
+ * `photos` only reaches a row being created here. An existing performer keeps
+ * the picture they already have — RLS lets an uploader add a model but not
+ * rewrite one, so attempting it would fail silently, and a name someone else
+ * entered is not this uploader's to re-illustrate.
+ */
+async function attachModels(
+  videoId: string,
+  raw: string | undefined,
+  userId: string,
+  photos: { name: string; value: string }[] = [],
+) {
   if (!raw) return
 
   const names = Array.from(
@@ -328,12 +374,19 @@ async function attachModels(videoId: string, raw: string | undefined, userId: st
   const missing = names.filter((n) => slugify(n) && !known.has(slugify(n)))
 
   if (missing.length > 0) {
+    // Matched on the slug rather than the raw text, so "Jane  Doe" and
+    // "jane doe" are the same performer here as they are everywhere else.
+    const photoBySlug = new Map(
+      photos.map((photo) => [slugify(photo.name), photo.value]),
+    )
+
     const { data: created } = await supabase
       .from('models')
       .insert(
         missing.map((name) => ({
           slug: slugify(name),
           name,
+          avatar_url: photoBySlug.get(slugify(name)) ?? null,
           created_by: userId,
           is_approved: false,
         })),
@@ -412,7 +465,7 @@ export async function createUploadDraft(
     parsed.data.categoryIds ?? [],
     parseTags(parsed.data.tags),
   )
-  await attachModels(video.id, parsed.data.models, profile.id)
+  await attachModels(video.id, parsed.data.models, profile.id, parsed.data.modelImages)
 
   const target = await provider.createUploadTarget({
     videoId: video.id,
@@ -572,7 +625,7 @@ export async function importFromUrl(
     parsed.data.categoryIds ?? [],
     parseTags(parsed.data.tags),
   )
-  await attachModels(video.id, parsed.data.models, profile.id)
+  await attachModels(video.id, parsed.data.models, profile.id, parsed.data.modelImages)
 
   const admin = createAdminClient()
 
@@ -858,7 +911,7 @@ export async function updateVideoDetails(
     parsed.data.categoryIds ?? [],
     parseTags(parsed.data.tags),
   )
-  await attachModels(videoId, parsed.data.models, profile.id)
+  await attachModels(videoId, parsed.data.models, profile.id, parsed.data.modelImages)
 
   revalidatePath('/studio/videos')
   revalidatePath('/admin/videos')

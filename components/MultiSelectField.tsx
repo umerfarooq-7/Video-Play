@@ -9,6 +9,23 @@ export interface MultiSelectOption {
 }
 
 /**
+ * One extra detail collected for each value that is being created rather than
+ * picked from the list — a picture for a performer nobody has entered before.
+ *
+ * It is deliberately offered only for new values. An existing record already
+ * has its own details, and editing those from here would mean writing to rows
+ * this form has no business touching.
+ */
+export interface NewEntryField {
+  /** Form field carrying the whole list as JSON. */
+  name: string
+  label: string
+  placeholder?: string
+  hint?: string
+  errors?: string[]
+}
+
+/**
  * Pick several values from a list, with suggestions, and submit them as one
  * comma-separated form field.
  *
@@ -31,6 +48,7 @@ export function MultiSelectField({
   max = 20,
   allowNew = true,
   initialValues = [],
+  newEntryField,
 }: {
   label: string
   name: string
@@ -43,11 +61,15 @@ export function MultiSelectField({
   allowNew?: boolean
   /** Values already chosen, for editing an existing record. */
   initialValues?: string[]
+  /** Ask for one more detail about each value being created. */
+  newEntryField?: NewEntryField
 }) {
   const [selected, setSelected] = useState<string[]>(initialValues)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
+  // Keyed the same way names are compared, so the detail follows its value.
+  const [extras, setExtras] = useState<Record<string, string>>({})
 
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
@@ -71,6 +93,19 @@ export function MultiSelectField({
     trimmed.length >= 2 &&
     !taken.has(trimmed.toLowerCase()) &&
     !options.some((o) => o.name.toLowerCase() === trimmed.toLowerCase())
+
+  // Anything not on the list will be created on save, which is what makes it
+  // worth asking for more about.
+  const onList = new Set(options.map((o) => o.name.toLowerCase()))
+  const newEntries = newEntryField
+    ? selected.filter((value) => !onList.has(value.toLowerCase()))
+    : []
+
+  // Built from what is still selected, so a detail typed for a value that was
+  // then removed is kept for a change of mind without ever being submitted.
+  const extraPayload = newEntries
+    .map((name) => ({ name, value: (extras[name.toLowerCase()] ?? '').trim() }))
+    .filter((entry) => entry.value !== '')
 
   function add(value: string) {
     // Commas separate the names in the submitted value, so one inside a name
@@ -240,6 +275,45 @@ export function MultiSelectField({
             </li>
           )}
         </ul>
+      )}
+
+      {newEntryField && newEntries.length > 0 && (
+        <div className="mt-2 space-y-2 rounded-lg border border-dashed border-border bg-background p-2.5">
+          <p className="text-[11px] leading-relaxed text-muted">
+            {newEntryField.hint ??
+              `${newEntries.length === 1 ? 'This name is' : 'These names are'} new. ` +
+                'Add a picture now and there is nothing to fill in afterwards.'}
+          </p>
+
+          {newEntries.map((name) => (
+            <label key={name} className="block space-y-1">
+              <span className="text-[11px] font-medium text-foreground">
+                {newEntryField.label} — {name}
+              </span>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={newEntryField.placeholder}
+                value={extras[name.toLowerCase()] ?? ''}
+                onChange={(event) =>
+                  setExtras((prev) => ({
+                    ...prev,
+                    [name.toLowerCase()]: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+            </label>
+          ))}
+
+          {newEntryField.errors?.length ? (
+            <p className="text-xs text-danger">{newEntryField.errors[0]}</p>
+          ) : null}
+
+          <input type="hidden" name={newEntryField.name} value={JSON.stringify(extraPayload)} />
+        </div>
       )}
 
       {hint && !hasError && (

@@ -177,6 +177,16 @@ export function VideoMetadataFields({
         placeholder="Start typing a name…"
         hint="Pick as many as appear in the video. A name that is not on the list yet is added automatically."
         errors={fieldErrors?.models}
+        newEntryField={{
+          name: 'modelImages',
+          label: 'Photo link',
+          placeholder: 'https://…/photo.jpg',
+          hint:
+            'New name, so there is no photo for it yet. Paste one here and the ' +
+            'performer page has its picture straight away — optional, and only ' +
+            'asked for names that are being created.',
+          errors: fieldErrors?.modelImages,
+        }}
       />
 
       <Field
