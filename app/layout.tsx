@@ -14,6 +14,14 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+/**
+ * AdSense publisher ID. Public by definition — it ships in the page source of
+ * every site that runs ads — so it is a default here rather than a secret, and
+ * the environment variable exists only so a staging copy can run without ads.
+ */
+const ADSENSE_CLIENT =
+  process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? 'ca-pub-8057123821810130'
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
@@ -48,6 +56,21 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
+        {/* React hoists a plain async <script> out of the tree and into the
+            <head> of the server-rendered HTML, which is what AdSense needs: it
+            verifies a site by reading the markup, so a loader injected after
+            hydration is one it never sees. It has to sit inside <body> for
+            that — between <html> and <body> it survives only in the RSC
+            payload. next/script's beforeInteractive emits a preload here, not
+            the tag itself, so it is not a substitute. */}
+        {ADSENSE_CLIENT && (
+          <script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+          />
+        )}
+
         {/* Keyboard and screen-reader users land on a grid of hundreds of
             links; without this they must tab past the whole category rail. */}
         <a
