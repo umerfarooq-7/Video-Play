@@ -8,6 +8,11 @@ import { siteUrl } from '@/lib/seo/site-url'
  * infinite space a crawler can fall into. `/search` is the last of those: every
  * combination of query, sort and filter is a distinct URL, and left open a
  * crawler will spend its whole budget there instead of on the videos.
+ *
+ * `/age-check` is deliberately NOT disallowed. It already sends `noindex`, and
+ * a crawler has to be allowed to fetch a page to read that — blocking it here
+ * would leave every copy Google indexed while the age wall was redirecting
+ * them sitting in the results with no way to clear it.
  */
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -20,7 +25,6 @@ export default function robots(): MetadataRoute.Robots {
         '/account',
         '/api',
         '/auth',
-        '/age-check',
         '/suspended',
         '/media',
         '/search',

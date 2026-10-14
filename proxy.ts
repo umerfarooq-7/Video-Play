@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { detectCountry, isRegion, toRegion } from '@/lib/geo'
+import { isSearchCrawler } from '@/lib/seo/crawlers'
 import {
   AGE_COOKIE,
   COUNTRY_HEADER,
@@ -111,8 +112,12 @@ export async function proxy(request: NextRequest) {
   // --- 3. Age wall --------------------------------------------------------
   const { pathname } = request.nextUrl
   const acknowledged = request.cookies.get(AGE_COOKIE)?.value === '1'
+  // A crawler has no cookie jar and nobody to click the button, so the
+  // interstitial would be the only page it ever saw. See lib/seo/crawlers.ts
+  // for why this is user-agent matching and what that costs.
+  const crawler = isSearchCrawler(request.headers.get('user-agent'))
 
-  if (!acknowledged && !isAgeExempt(pathname)) {
+  if (!acknowledged && !crawler && !isAgeExempt(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/age-check'
     // Preserve where they were heading so the wall can bounce them back.
