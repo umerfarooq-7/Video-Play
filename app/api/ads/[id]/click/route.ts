@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { siteUrl } from '@/lib/seo/site-url'
 
 /**
  * Count a click on a banner, then send the visitor on to the advertiser.
@@ -32,7 +33,10 @@ export async function GET(
     .maybeSingle()
 
   if (!ad?.target_url || !/^https?:\/\//i.test(ad.target_url)) {
-    return NextResponse.redirect(new URL('/', _request.url), 302)
+    // Built from the configured site URL, not from the request. Behind nginx
+    // the request arrives as http://localhost:3000, so deriving the fallback
+    // from it would send the visitor to a host only this server can reach.
+    return NextResponse.redirect(`${siteUrl()}/`, 302)
   }
 
   await supabase.rpc('record_ad_click', { p_ad_id: id })
