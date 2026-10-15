@@ -37,12 +37,16 @@ export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
           {isAdmin ? 'Admin' : 'Moderation'}
         </h1>
 
-        <nav className="flex gap-1 overflow-x-auto scrollbar-none lg:flex-col lg:overflow-visible">
+        {/* Wraps on a phone rather than scrolling sideways. As a scroll strip
+            the last items sat past the right edge with nothing to show they
+            were there, so a newly added section looked like it had not been
+            added at all. */}
+        <nav className="flex flex-wrap gap-1 lg:flex-col lg:flex-nowrap">
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
-              className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-muted hover:bg-surface hover:text-foreground"
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted hover:bg-surface hover:text-foreground lg:border-transparent"
             >
               <Icon size={15} aria-hidden />
               {label}
