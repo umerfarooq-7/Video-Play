@@ -1,0 +1,189 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/guards'
+import type { CatalogState } from '@/lib/admin/catalog-actions'
+
+export type { CatalogState }
+
+const PLACEMENTS = ['home_grid', 'under_player', 'preroll'] as const
+const KINDS = ['image', 'html', 'video'] as const
+
+/**
+ * Only http(s). These values are written into `src` and `href` attributes on
+ * public pages, so a `javascript:` URL pasted here would run in every
+ * visitor's browser. The same rule is a CHECK constraint on the table, because
+ * this form is not the only thing that can reach the column.
+ */
+const httpUrl = z
+  .union([z.url(), z.literal('')])
+  .optional()
+  .refine((v) => !v || /^https?:\/\//.test(v), {
+    error: 'Links must start with http:// or https://',
+  })
+
+const adSchema = z
+  .object({
+    id: z.uuid().optional(),
+    name: z
+      .string()
+      .trim()
+      .min(2, { error: 'Give the ad a name so you can recognise it later.' })
+      .max(80),
+    placement: z.enum(PLACEMENTS),
+    kind: z.enum(KINDS),
+    imageUrl: httpUrl,
+    targetUrl: httpUrl,
+    videoUrl: httpUrl,
+    // An ad network's snippet. Stored verbatim and rendered inside a sandboxed
+    // iframe; see components/ads/AdSlot.tsx for why that frame is the only
+    // place third-party script is allowed to run.
+    htmlCode: z.string().trim().max(10_000).optional(),
+    width: z.coerce.number().int().min(40).max(2000).optional(),
+    height: z.coerce.number().int().min(40).max(2000).optional(),
+    skipAfterSeconds: z.coerce.number().int().min(0).max(60).optional(),
+    sortOrder: z.coerce.number().int().min(0).max(999).optional(),
+    isActive: z.boolean().optional(),
+    startsAt: z.union([z.iso.datetime({ local: true }), z.literal('')]).optional(),
+    endsAt: z.union([z.iso.datetime({ local: true }), z.literal('')]).optional(),
+  })
+  // The database rejects these too, but a constraint violation comes back as
+  // "ads_ad_has_creative" — true, and useless to whoever is filling the form.
+  .refine((v) => v.kind !== 'image' || !!v.imageUrl, {
+    error: 'An image ad needs an image link.',
+    path: ['imageUrl'],
+  })
+  .refine((v) => v.kind !== 'html' || !!v.htmlCode, {
+    error: 'Paste the code your ad network gave you.',
+    path: ['htmlCode'],
+  })
+  .refine((v) => v.kind !== 'html' || !!v.height, {
+    error: 'An ad network block needs a height, or the frame has none.',
+    path: ['height'],
+  })
+  .refine((v) => v.kind !== 'video' || !!v.videoUrl, {
+    error: 'A pre-roll needs a link to the video file.',
+    path: ['videoUrl'],
+  })
+  .refine((v) => (v.placement === 'preroll') === (v.kind === 'video'), {
+    error: 'A pre-roll must be a video, and a video can only be a pre-roll.',
+    path: ['kind'],
+  })
+
+export async function saveAd(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  await requireAdmin('/admin/ads')
+
+  const parsed = adSchema.safeParse({
+    id: formData.get('id') || undefined,
+    name: formData.get('name'),
+    placement: formData.get('placement'),
+    kind: formData.get('kind'),
+    imageUrl: formData.get('imageUrl') || undefined,
+    targetUrl: formData.get('targetUrl') || undefined,
+    videoUrl: formData.get('videoUrl') || undefined,
+    htmlCode: formData.get('htmlCode') || undefined,
+    width: formData.get('width') || undefined,
+    height: formData.get('height') || undefined,
+    skipAfterSeconds: formData.get('skipAfterSeconds') || undefined,
+    sortOrder: formData.get('sortOrder') || undefined,
+    isActive: formData.get('isActive') === 'on',
+    startsAt: formData.get('startsAt') || undefined,
+    endsAt: formData.get('endsAt') || undefined,
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const d = parsed.data
+  const supabase = await createClient()
+
+  // Only the fields the chosen kind uses are written. Without this, switching
+  // an ad from an image to a snippet would leave the old image URL behind and
+  // the CHECK constraints would start disagreeing with what the form shows.
+  const values = {
+    name: d.name,
+    placement: d.placement,
+    kind: d.kind,
+    image_url: d.kind === 'image' ? d.imageUrl || null : null,
+    html_code: d.kind === 'html' ? d.htmlCode || null : null,
+    video_url: d.kind === 'video' ? d.videoUrl || null : null,
+    target_url: d.targetUrl || null,
+    width: d.width ?? null,
+    height: d.height ?? null,
+    skip_after_seconds: d.skipAfterSeconds ?? 5,
+    sort_order: d.sortOrder ?? 0,
+    is_active: d.isActive ?? false,
+    starts_at: d.startsAt ? new Date(d.startsAt).toISOString() : null,
+    ends_at: d.endsAt ? new Date(d.endsAt).toISOString() : null,
+  }
+
+  const { error } = d.id
+    ? await supabase.from('ads').update(values).eq('id', d.id)
+    : await supabase.from('ads').insert(values)
+
+  if (error) return { error: error.message }
+
+  revalidateAdSurfaces()
+  return { success: d.id ? 'Ad saved.' : 'Ad added.' }
+}
+
+export async function deleteAd(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  await requireAdmin('/admin/ads')
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Missing ad.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('ads').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidateAdSurfaces()
+  return { success: 'Ad deleted.' }
+}
+
+const settingsSchema = z.object({
+  homeGridInterval: z.coerce
+    .number()
+    .int()
+    .min(6, { error: 'Fewer than 6 videos between banners is more advert than site.' })
+    .max(100, { error: 'More than 100 and the banner is never reached.' }),
+})
+
+export async function saveAdSettings(
+  _prev: CatalogState,
+  formData: FormData,
+): Promise<CatalogState> {
+  await requireAdmin('/admin/ads')
+
+  const parsed = settingsSchema.safeParse({
+    homeGridInterval: formData.get('homeGridInterval'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('ad_settings')
+    .update({ home_grid_interval: parsed.data.homeGridInterval })
+    .eq('id', true)
+
+  if (error) return { error: error.message }
+
+  revalidateAdSurfaces()
+  return { success: 'Spacing saved.' }
+}
+
+/** Every page an ad can appear on, so a change shows up without a rebuild. */
+function revalidateAdSurfaces() {
+  revalidatePath('/admin/ads')
+  revalidatePath('/')
+  // Every watch page at once. The literal route pattern is what invalidates
+  // the whole dynamic segment; a concrete slug would clear one video only, and
+  // an ad change affects all of them.
+  revalidatePath('/watch/[slug]', 'page')
+}

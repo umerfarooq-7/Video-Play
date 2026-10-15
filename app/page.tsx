@@ -10,6 +10,7 @@ import {
 import { VideoGrid } from '@/components/VideoCard'
 import { InfiniteVideoGrid } from '@/components/InfiniteVideoGrid'
 import { EntityAvatar } from '@/components/BrowseResults'
+import { listAdsFor, getHomeGridInterval } from '@/lib/ads/queries'
 import { REGION_CONFIG, isRegion } from '@/lib/geo'
 import { COUNTRY_HEADER, REGION_HEADER } from '@/lib/constants'
 
@@ -29,13 +30,16 @@ export default async function HomePage() {
   const region = isRegion(regionHeader) ? regionHeader : 'INT'
   const regionConfig = REGION_CONFIG[region]
 
-  const [trending, latest, models, paysites, categories] = await Promise.all([
-    listVideos({ sort: 'views', perPage: 12, country }),
-    listVideos({ sort: 'new', perPage: LATEST_PER_PAGE, country }),
-    getFeaturedModels(24),
-    getFeaturedPaysites(24),
-    getCategories(),
-  ])
+  const [trending, latest, models, paysites, categories, gridAds, adInterval] =
+    await Promise.all([
+      listVideos({ sort: 'views', perPage: 12, country }),
+      listVideos({ sort: 'new', perPage: LATEST_PER_PAGE, country }),
+      getFeaturedModels(24),
+      getFeaturedPaysites(24),
+      getCategories(),
+      listAdsFor('home_grid'),
+      getHomeGridInterval(),
+    ])
 
   return (
     <div className="space-y-6">
@@ -124,6 +128,8 @@ export default async function HomePage() {
           perPage={LATEST_PER_PAGE}
           sort="new"
           emptyMessage="No videos yet."
+          ads={gridAds}
+          adInterval={adInterval}
         />
       </section>
     </div>

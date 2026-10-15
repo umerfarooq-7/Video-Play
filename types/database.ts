@@ -83,6 +83,38 @@ export type Model = {
   created_at: string
 }
 
+/** Where on the site an ad is shown. */
+export type AdPlacement = 'home_grid' | 'under_player' | 'preroll'
+/** What the ad is made of. See supabase/migrations/0011_ads.sql. */
+export type AdKind = 'image' | 'html' | 'video'
+
+export type Ad = {
+  id: string
+  name: string
+  placement: AdPlacement
+  kind: AdKind
+  image_url: string | null
+  target_url: string | null
+  html_code: string | null
+  width: number | null
+  height: number | null
+  video_url: string | null
+  skip_after_seconds: number
+  is_active: boolean
+  sort_order: number
+  starts_at: string | null
+  ends_at: string | null
+  click_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type AdSettings = {
+  id: boolean
+  home_grid_interval: number
+  updated_at: string
+}
+
 export type Profile = {
   id: string
   username: string
@@ -462,6 +494,8 @@ export interface Database {
         Partial<Report>,
         ReportRels
       >
+      ads: TableDef<Ad, Pick<Ad, 'name' | 'placement' | 'kind'> & Partial<Ad>>
+      ad_settings: TableDef<AdSettings, Partial<AdSettings>>
       audit_log: TableDef<{
         id: number
         actor_id: string | null
@@ -478,6 +512,7 @@ export interface Database {
       is_admin: { Args: Record<never, never>; Returns: boolean }
       is_approved_uploader: { Args: Record<never, never>; Returns: boolean }
       claim_ingest_job: { Args: { worker_id: string }; Returns: IngestJob }
+      record_ad_click: { Args: { p_ad_id: string }; Returns: void }
       record_video_view: {
         Args: {
           p_video_id: string
@@ -497,6 +532,8 @@ export interface Database {
       job_status: JobStatus
       report_reason: ReportReason
       report_status: ReportStatus
+      ad_placement: AdPlacement
+      ad_kind: AdKind
     }
   }
 }

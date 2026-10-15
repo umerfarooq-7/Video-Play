@@ -14,6 +14,8 @@ import { EntityAvatar } from '@/components/BrowseResults'
 import { WatchActions } from './WatchActions'
 import { ViewCounter } from './ViewCounter'
 import { NetworkOfferBar, NetworkDownloadLink } from './NetworkPromo'
+import { AdBanner } from '@/components/ads/AdSlot'
+import { listAdsFor, pickAd } from '@/lib/ads/queries'
 import type { Video, VideoProjection } from '@/types/database'
 
 type WatchRow = Video & {
@@ -95,8 +97,18 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
   // RLS lets the owner and staff see unpublished rows so they can preview.
   if (!video) notFound()
 
-  const [user, headerList] = await Promise.all([getCurrentUser(), headers()])
+  const [user, headerList, prerolls, underPlayerAds] = await Promise.all([
+    getCurrentUser(),
+    headers(),
+    listAdsFor('preroll'),
+    listAdsFor('under_player'),
+  ])
   const country = headerList.get(COUNTRY_HEADER) || null
+
+  // One ad per slot. Keyed off this video, so several campaigns divide the
+  // library between them instead of the first one taking every impression.
+  const preroll = pickAd(prerolls, video.id)
+  const underPlayerAd = pickAd(underPlayerAds, `under:${video.id}`)
 
   const isOwner = user?.id === video.owner_id
   const isPublished = video.status === 'published'
@@ -183,6 +195,7 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
             src={playbackUrl}
             poster={poster}
             projection={video.projection as VideoProjection}
+            preroll={preroll}
           />
         ) : (
           <div className="grid aspect-video w-full place-items-center rounded-xl border border-border bg-surface text-center">
@@ -201,6 +214,8 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
             fullDurationSeconds={video.full_duration_seconds}
           />
         )}
+
+        {underPlayerAd && <AdBanner ad={underPlayerAd} />}
 
         <div>
           <h1 className="text-lg font-bold leading-snug">{video.title}</h1>

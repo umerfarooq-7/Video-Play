@@ -1,6 +1,9 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { Eye, ThumbsUp, Glasses } from 'lucide-react'
 import { VideoThumb } from '@/components/VideoThumb'
+import { AdBanner } from '@/components/ads/AdSlot'
+import type { AdCreative } from '@/lib/ads/queries'
 import {
   formatCount,
   formatDuration,
@@ -98,9 +101,15 @@ export function VideoCard({ video, priority = false }: Props) {
 export function VideoGrid({
   videos,
   emptyMessage = 'No videos found.',
+  ads = [],
+  adInterval = 0,
 }: {
   videos: VideoCardData[]
   emptyMessage?: string
+  /** Banners to drop between the rows. Several are shown in turn. */
+  ads?: AdCreative[]
+  /** Videos between one banner and the next. 0 turns banners off. */
+  adInterval?: number
 }) {
   if (videos.length === 0) {
     return (
@@ -108,11 +117,30 @@ export function VideoGrid({
     )
   }
 
+  const showAds = ads.length > 0 && adInterval > 0
+
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-      {videos.map((video, index) => (
-        <VideoCard key={video.id} video={video} priority={index < 6} />
-      ))}
+      {videos.map((video, index) => {
+        const slot = index + 1
+        // After every `adInterval` videos, and never trailing the last one —
+        // a banner below the final row is just the footer with extra steps.
+        const banner =
+          showAds && slot % adInterval === 0 && slot < videos.length
+            ? ads[Math.floor(slot / adInterval - 1) % ads.length]
+            : null
+
+        return (
+          <Fragment key={video.id}>
+            <VideoCard video={video} priority={index < 6} />
+            {banner && (
+              // col-span-full breaks the banner out of the card columns so it
+              // sits on a row of its own at any breakpoint.
+              <AdBanner ad={banner} className="col-span-full" />
+            )}
+          </Fragment>
+        )
+      })}
     </div>
   )
 }

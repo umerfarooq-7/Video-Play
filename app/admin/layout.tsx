@@ -8,6 +8,7 @@ import {
   Globe,
   UserRound,
   Film,
+  Megaphone,
 } from 'lucide-react'
 import { requireStaff } from '@/lib/auth/guards'
 
@@ -26,6 +27,7 @@ export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
     { href: '/admin/paysites', label: 'Networks', icon: Globe, adminOnly: true },
     { href: '/admin/models', label: 'Models', icon: UserRound, adminOnly: true },
     { href: '/admin/videos', label: 'All videos', icon: Film, adminOnly: true },
+    { href: '/admin/ads', label: 'Ads', icon: Megaphone, adminOnly: true },
   ].filter((link) => !link.adminOnly || isAdmin)
 
   return (

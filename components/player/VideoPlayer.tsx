@@ -17,6 +17,15 @@ export interface PlayerSource {
   /** HLS manifest URL, or a progressive MP4 as a fallback. */
   src: string
   poster?: string | null
+  /**
+   * Start as soon as the source is attached.
+   *
+   * Only set after the viewer has already pressed something — the pre-roll
+   * handing over, for instance. A browser blocks an unprompted autoplay with
+   * sound, so switching this on by default would leave people staring at a
+   * paused frame with no idea the play button had done anything.
+   */
+  autoPlay?: boolean
 }
 
 interface Quality {
@@ -34,7 +43,7 @@ interface Quality {
  * hls.js is imported dynamically so its ~150KB never reaches Safari users, or
  * anyone who only loads a page without a player on it.
  */
-export function VideoPlayer({ src, poster }: PlayerSource) {
+export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -255,6 +264,7 @@ export function VideoPlayer({ src, poster }: PlayerSource) {
       <video
         ref={videoRef}
         poster={poster ?? undefined}
+        autoPlay={autoPlay}
         playsInline
         onClick={togglePlay}
         className="h-full w-full"

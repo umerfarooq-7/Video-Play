@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { VideoGrid } from '@/components/VideoCard'
 import { loadMoreVideos } from '@/lib/browse/actions'
 import type { VideoCardData } from '@/lib/queries'
+import type { AdCreative } from '@/lib/ads/queries'
 
 /**
  * A grid that keeps loading the next page as it is scrolled.
@@ -24,12 +25,17 @@ export function InfiniteVideoGrid({
   perPage,
   sort,
   emptyMessage,
+  ads = [],
+  adInterval = 0,
 }: {
   initial: VideoCardData[]
   total: number
   perPage: number
   sort: 'new' | 'views' | 'rating' | 'duration'
   emptyMessage?: string
+  /** Banners to drop between the rows, counted across the whole grown list. */
+  ads?: AdCreative[]
+  adInterval?: number
 }) {
   const [videos, setVideos] = useState(initial)
   const [page, setPage] = useState(1)
@@ -109,7 +115,12 @@ export function InfiniteVideoGrid({
 
   return (
     <div>
-      <VideoGrid videos={videos} emptyMessage={emptyMessage} />
+      <VideoGrid
+        videos={videos}
+        emptyMessage={emptyMessage}
+        ads={ads}
+        adInterval={adInterval}
+      />
 
       {/* Announce growth for screen readers, which have no scroll position to
           tell them anything happened. */}
