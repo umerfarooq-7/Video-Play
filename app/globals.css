@@ -94,3 +94,58 @@ body {
     display: none;
   }
 }
+
+/* The player's seek bar.
+   
+   A native range input is used so dragging, touch and keyboard all work the
+   way the platform already does them. What it does not give for free is a
+   target big enough to grab: the visible bar is 4px, which on a phone is
+   smaller than a fingertip, so every attempt to drag landed as a tap and the
+   video jumped instead of scrubbing. The element is therefore 20px tall with
+   a transparent surround, and only the middle of it is painted. */
+.seek-range {
+  height: 20px;
+  margin: -8px 0;
+  /* Let the browser treat a drag on the bar as a drag, not a page scroll. */
+  touch-action: none;
+}
+
+.seek-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--seek-progress, 0%),
+    rgb(255 255 255 / 0.25) var(--seek-progress, 0%)
+  );
+}
+
+.seek-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--seek-progress, 0%),
+    rgb(255 255 255 / 0.25) var(--seek-progress, 0%)
+  );
+}
+
+.seek-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+.seek-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}

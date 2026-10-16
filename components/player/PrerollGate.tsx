@@ -87,7 +87,22 @@ export function PrerollGate({
 
       {started && (
         <>
-          <span className="absolute left-3 top-3 rounded bg-black/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
+          {/* The whole frame opens the advertiser, which is how a pre-roll is
+              normally sold. It sits under the controls below, so Skip and Mute
+              stay clickable — those are rendered after it and therefore paint
+              on top. */}
+          {ad.clickable && (
+            <a
+              href={`/api/ads/${ad.id}/click`}
+              target="_blank"
+              rel="sponsored nofollow noopener noreferrer"
+              className="absolute inset-0"
+            >
+              <span className="sr-only">Visit advertiser</span>
+            </a>
+          )}
+
+          <span className="pointer-events-none absolute left-3 top-3 rounded bg-black/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
             Ad{left !== null && ` · ${left}s`}
           </span>
 
@@ -119,14 +134,11 @@ export function PrerollGate({
           </div>
 
           {ad.clickable && (
-            <a
-              href={`/api/ads/${ad.id}/click`}
-              target="_blank"
-              rel="sponsored nofollow noopener noreferrer"
-              className="absolute bottom-3 left-3 rounded-full bg-accent px-3 py-2 text-xs font-bold text-accent-contrast hover:opacity-90"
-            >
+            // A visible hint as well as the full-frame link, so it is obvious
+            // the ad leads somewhere rather than the click being a surprise.
+            <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-accent px-3 py-2 text-xs font-bold text-accent-contrast">
               Visit advertiser
-            </a>
+            </span>
           )}
         </>
       )}

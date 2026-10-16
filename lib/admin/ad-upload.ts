@@ -24,8 +24,8 @@ const ALLOWED: Record<string, string> = {
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm']
 
-/** 25 MB, matching the bucket's own limit. */
-const MAX_BYTES = 25 * 1024 * 1024
+/** 50 MB, matching the bucket's own limit. */
+const MAX_BYTES = 50 * 1024 * 1024
 
 export type UploadResult = { url: string } | { error: string }
 
@@ -41,7 +41,7 @@ export async function uploadAdFile(
 ): Promise<UploadResult> {
   if (file.size === 0) return { error: 'That file is empty.' }
   if (file.size > MAX_BYTES) {
-    return { error: `That file is ${mb(file.size)} MB. The limit is 25 MB.` }
+    return { error: `That file is ${mb(file.size)} MB. The limit is 50 MB.` }
   }
 
   const extension = ALLOWED[file.type]

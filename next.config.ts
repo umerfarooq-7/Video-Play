@@ -44,10 +44,16 @@ const nextConfig: NextConfig = {
       // Ad creatives are uploaded through a server action, and a pre-roll clip
       // runs to several megabytes. The 1MB default rejects those before the
       // action ever runs, with an error that says nothing about the size. A
-      // little over the bucket's own 25MB ceiling, because the limit counts
+      // little over the bucket's own 50MB ceiling, because the limit counts
       // the multipart boundaries and part headers as well as the file.
-      bodySizeLimit: '26mb',
+      bodySizeLimit: '52mb',
     },
+    // The one that actually bit. proxy.ts runs on every request, and Next
+    // buffers the body for it — capped at 10MB by default. Past that the body
+    // is truncated and the action fails with "Unexpected end of form", which
+    // says nothing about a size limit. Raising bodySizeLimit alone changed
+    // nothing, because the body never arrived intact in the first place.
+    proxyClientMaxBodySize: '52mb',
   },
 }
 

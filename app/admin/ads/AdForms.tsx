@@ -150,7 +150,8 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
   const [kind, setKind] = useState<AdKind>(ad?.kind ?? 'image')
 
   const isPreroll = placement === 'preroll'
-  const effectiveKind: AdKind = isPreroll ? 'video' : kind === 'video' ? 'image' : kind
+  // A pre-roll can only be a video; a banner can now be any of the three.
+  const effectiveKind: AdKind = isPreroll ? 'video' : kind
 
   return (
     <>
@@ -187,10 +188,11 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
           value={effectiveKind}
           onChange={(value) => setKind(value as AdKind)}
           options={[
-            { value: 'image', label: 'An image I link somewhere' },
+            { value: 'image', label: 'An image or GIF' },
+            { value: 'video', label: 'A video file (MP4) — plays like a GIF' },
             { value: 'html', label: 'Code from an ad network' },
           ]}
-          hint="Networks like ExoClick or JuicyAds give you a block of code — paste it below."
+          hint="A short MP4 looks the same as an animated GIF and is often twenty times smaller — use it when the GIF is too big to upload."
           errors={fieldErrors?.kind}
         />
       )}
@@ -202,7 +204,7 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
             label="Upload a banner"
             name="imageFile"
             accept="image/jpeg,image/png,image/gif,image/webp"
-            hint="JPG, PNG, GIF or WebP, up to 25 MB. Animated GIFs work."
+            hint="JPG, PNG, GIF or WebP, up to 50 MB. Animated GIFs work."
             errors={fieldErrors?.imageFile}
           />
           <Field
@@ -233,10 +235,10 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
         <>
           <CurrentCreative url={ad?.video_url ?? null} kind="video" />
           <FileField
-            label="Upload the ad clip"
+            label={isPreroll ? 'Upload the ad clip' : 'Upload the banner video'}
             name="videoFile"
             accept="video/mp4,video/webm"
-            hint="MP4 or WebM, up to 25 MB."
+            hint="MP4 or WebM, up to 50 MB. A banner clip plays muted on a loop."
             errors={fieldErrors?.videoFile}
           />
           <Field
@@ -248,14 +250,16 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
             hint="Only needed if the clip is already hosted somewhere."
             errors={fieldErrors?.videoUrl}
           />
-          <Field
-            label="Skip button appears after"
-            name="skipAfterSeconds"
-            type="number"
-            defaultValue={String(ad?.skip_after_seconds ?? 5)}
-            hint="Seconds. 0 lets them skip straight away."
-            errors={fieldErrors?.skipAfterSeconds}
-          />
+          {isPreroll && (
+            <Field
+              label="Skip button appears after"
+              name="skipAfterSeconds"
+              type="number"
+              defaultValue={String(ad?.skip_after_seconds ?? 5)}
+              hint="Seconds. 0 lets them skip straight away."
+              errors={fieldErrors?.skipAfterSeconds}
+            />
+          )}
         </>
       )}
 
@@ -271,7 +275,7 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
         />
       )}
 
-      {effectiveKind !== 'video' && (
+      {!isPreroll && (
         <div className="grid grid-cols-2 gap-3">
           <Field
             label="Width (px)"

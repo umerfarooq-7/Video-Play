@@ -31,6 +31,29 @@ export function AdSlot({ ad, className = '' }: { ad: AdCreative; className?: str
     )
   }
 
+  // A short clip standing in for an animated GIF. Muted and looping, with no
+  // controls, so it reads as a banner rather than something to play — and at
+  // a fraction of a GIF's size for the same few seconds of motion.
+  if (ad.kind === 'video' && ad.videoUrl) {
+    const clip = (
+      <video
+        src={ad.videoUrl}
+        width={ad.width ?? undefined}
+        height={ad.height ?? undefined}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        // Not just decoration: a banner that pauses out of view costs the
+        // viewer nothing and saves the bandwidth.
+        className="mx-auto block h-auto max-w-full"
+      />
+    )
+
+    return wrapClick(ad, clip, className)
+  }
+
   if (ad.kind !== 'image' || !ad.imageUrl) return null
 
   const image = (
@@ -47,8 +70,13 @@ export function AdSlot({ ad, className = '' }: { ad: AdCreative; className?: str
     />
   )
 
+  return wrapClick(ad, image, className)
+}
+
+/** Make a creative clickable, when the ad has somewhere to send the viewer. */
+function wrapClick(ad: AdCreative, creative: React.ReactNode, className: string) {
   if (!ad.clickable) {
-    return <div className={className}>{image}</div>
+    return <div className={className}>{creative}</div>
   }
 
   return (
@@ -60,7 +88,7 @@ export function AdSlot({ ad, className = '' }: { ad: AdCreative; className?: str
       rel="sponsored nofollow noopener noreferrer"
       className={`block ${className}`}
     >
-      {image}
+      {creative}
     </a>
   )
 }

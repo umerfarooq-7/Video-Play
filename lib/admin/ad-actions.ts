@@ -70,8 +70,10 @@ const adSchema = z
     error: 'A pre-roll needs a link to the video file.',
     path: ['videoUrl'],
   })
-  .refine((v) => (v.placement === 'preroll') === (v.kind === 'video'), {
-    error: 'A pre-roll must be a video, and a video can only be a pre-roll.',
+  // One way only: a pre-roll is always a video, but a video is no longer
+  // only ever a pre-roll — a banner slot can hold one in place of a GIF.
+  .refine((v) => v.placement !== 'preroll' || v.kind === 'video', {
+    error: 'An ad before the video has to be a video.',
     path: ['kind'],
   })
 

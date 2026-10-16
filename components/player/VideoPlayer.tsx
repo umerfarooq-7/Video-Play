@@ -60,6 +60,9 @@ export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
   const [currentQuality, setCurrentQuality] = useState(-1)
   const [showSettings, setShowSettings] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Where the handle is being dragged to, or null when nobody is dragging. */
+  const [scrub, setScrub] = useState<number | null>(null)
+  const dragging = useRef(false)
 
   // --- Source attachment ---------------------------------------------------
   useEffect(() => {
@@ -181,6 +184,20 @@ export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
     else video.pause()
   }, [])
 
+  /** Apply the dragged position and hand the bar back to the video. */
+  const commitScrub = useCallback(() => {
+    dragging.current = false
+    setScrub((position) => {
+      if (position !== null) {
+        const video = videoRef.current
+        if (video) {
+          video.currentTime = Math.max(0, Math.min(position, video.duration || 0))
+        }
+      }
+      return null
+    })
+  }, [])
+
   const seek = useCallback((seconds: number) => {
     const video = videoRef.current
     if (!video) return
@@ -248,7 +265,12 @@ export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
 
   useEffect(() => () => clearTimeout(hideControlsTimer.current), [])
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+  // While the handle is held, the bar shows where the finger is rather than
+  // where the video is. Without this the two fight each other: every move
+  // seeks, the seek takes a moment over HLS, and `timeupdate` then snaps the
+  // handle back to the old position — which reads as "it only jumps".
+  const shown = scrub ?? currentTime
+  const progress = duration > 0 ? (shown / duration) * 100 : 0
 
   return (
     <div
@@ -310,12 +332,35 @@ export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
           min={0}
           max={duration || 0}
           step={0.1}
-          value={currentTime}
-          onChange={(e) => seek(Number(e.target.value))}
-          aria-valuetext={`${formatDuration(currentTime)} of ${formatDuration(duration)}`}
-          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/25 accent-[var(--accent)]"
+          value={shown}
+          // Dragging only moves the handle. The video is left alone until the
+          // finger lifts, so playback carries on instead of stalling on a
+          // seek per pixel.
+          //
+          // A ref, not the `scrub` state, decides which branch runs below:
+          // pointerdown and the first move can land in one React batch, and a
+          // state update would not be visible to the change handler yet — so
+          // the first movement of every drag would seek for real and the
+          // handle would then snap back.
+          onPointerDown={() => {
+            dragging.current = true
+          }}
+          onChange={(e) => {
+            const value = Number(e.target.value)
+            if (dragging.current) setScrub(value)
+            else seek(value)
+          }}
+          onPointerUp={() => commitScrub()}
+          onPointerCancel={() => commitScrub()}
+          // A keyboard user gets no pointer events at all, so arrow keys go
+          // through the onChange branch above and seek immediately.
+          onBlur={() => commitScrub()}
+          aria-valuetext={`${formatDuration(shown)} of ${formatDuration(duration)}`}
+          className="seek-range w-full cursor-pointer appearance-none bg-transparent"
           style={{
-            background: `linear-gradient(to right, var(--accent) ${progress}%, rgba(255,255,255,0.25) ${progress}%)`,
+            // Painted on the track itself rather than the element, so the
+            // taller touch area around it stays transparent.
+            ['--seek-progress' as string]: `${progress}%`,
           }}
         />
 
@@ -360,7 +405,7 @@ export function VideoPlayer({ src, poster, autoPlay = false }: PlayerSource) {
           </div>
 
           <span className="text-xs tabular-nums">
-            {formatDuration(currentTime)} / {formatDuration(duration)}
+            {formatDuration(shown)} / {formatDuration(duration)}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
