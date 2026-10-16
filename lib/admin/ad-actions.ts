@@ -5,12 +5,14 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/guards'
 import { uploadAdFile, removeAdFile } from '@/lib/admin/ad-upload'
+import { AD_PLACEMENTS, AD_KINDS } from '@/types/database'
 import type { CatalogState } from '@/lib/admin/catalog-actions'
 
 export type { CatalogState }
 
-const PLACEMENTS = ['home_grid', 'under_player', 'preroll'] as const
-const KINDS = ['image', 'html', 'video'] as const
+// Imported rather than restated: see the note on AD_PLACEMENTS.
+const PLACEMENTS = AD_PLACEMENTS
+const KINDS = AD_KINDS
 
 /**
  * Only http(s). These values are written into `src` and `href` attributes on
@@ -101,6 +103,12 @@ export async function saveAd(_prev: CatalogState, formData: FormData): Promise<C
   })
 
   if (!parsed.success) {
+    // The file had to be uploaded before validation, because validation is
+    // what checks the creative is there — but a form that then fails would
+    // otherwise leave it in storage with no ad pointing at it. That is how
+    // four orphans accumulated while a bad placement was rejecting every save.
+    await removeAdFile(uploaded.imageUrl)
+    await removeAdFile(uploaded.videoUrl)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
   }
 
@@ -138,7 +146,13 @@ export async function saveAd(_prev: CatalogState, formData: FormData): Promise<C
     ? await supabase.from('ads').update(values).eq('id', d.id)
     : await supabase.from('ads').insert(values)
 
-  if (error) return { error: error.message }
+  if (error) {
+    // Same reasoning as the validation failure above: nothing references the
+    // file now, so it should not stay in storage.
+    await removeAdFile(uploaded.imageUrl)
+    await removeAdFile(uploaded.videoUrl)
+    return { error: error.message }
+  }
 
   if (previous) {
     if (previous.image_url && previous.image_url !== values.image_url) {

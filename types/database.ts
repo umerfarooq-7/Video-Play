@@ -83,10 +83,23 @@ export type Model = {
   created_at: string
 }
 
-/** Where on the site an ad is shown. */
-export type AdPlacement = 'home_grid' | 'under_player' | 'sidebar' | 'preroll'
-/** What the ad is made of. See supabase/migrations/0011_ads.sql. */
-export type AdKind = 'image' | 'html' | 'video'
+/**
+ * Where on the site an ad is shown, and what it is made of.
+ *
+ * Written as runtime tuples with the types derived from them, so the list the
+ * form validates against cannot drift from the list the rest of the code
+ * accepts. It did once: a placement added to the type and the database was
+ * missed in the validator, and every attempt to save one was rejected with
+ * "expected one of home_grid|under_player|preroll".
+ *
+ * Must match the ad_placement and ad_kind enums in the database — see
+ * supabase/migrations/0011_ads.sql and 0012_ad_slots_and_uploads.sql.
+ */
+export const AD_PLACEMENTS = ['home_grid', 'under_player', 'sidebar', 'preroll'] as const
+export type AdPlacement = (typeof AD_PLACEMENTS)[number]
+
+export const AD_KINDS = ['image', 'html', 'video'] as const
+export type AdKind = (typeof AD_KINDS)[number]
 
 export type Ad = {
   id: string
