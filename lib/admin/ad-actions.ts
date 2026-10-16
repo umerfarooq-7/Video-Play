@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/guards'
+import { uploadAdFile, removeAdFile } from '@/lib/admin/ad-upload'
 import type { CatalogState } from '@/lib/admin/catalog-actions'
 
 export type { CatalogState }
@@ -75,14 +76,20 @@ const adSchema = z
 export async function saveAd(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
   await requireAdmin('/admin/ads')
 
+  // A chosen file wins over anything in the matching URL box, and is resolved
+  // to a URL before validation so the rest of the schema does not need to know
+  // which of the two the creative arrived as.
+  const uploaded = await takeUploads(formData)
+  if ('error' in uploaded) return { fieldErrors: uploaded.error }
+
   const parsed = adSchema.safeParse({
     id: formData.get('id') || undefined,
     name: formData.get('name'),
     placement: formData.get('placement'),
     kind: formData.get('kind'),
-    imageUrl: formData.get('imageUrl') || undefined,
+    imageUrl: uploaded.imageUrl ?? formData.get('imageUrl') ?? undefined,
     targetUrl: formData.get('targetUrl') || undefined,
-    videoUrl: formData.get('videoUrl') || undefined,
+    videoUrl: uploaded.videoUrl ?? formData.get('videoUrl') ?? undefined,
     htmlCode: formData.get('htmlCode') || undefined,
     width: formData.get('width') || undefined,
     height: formData.get('height') || undefined,
@@ -99,6 +106,13 @@ export async function saveAd(_prev: CatalogState, formData: FormData): Promise<C
 
   const d = parsed.data
   const supabase = await createClient()
+
+  // What the ad used to point at, so a creative this edit replaces can be
+  // cleared out of storage instead of lingering there unreferenced.
+  const previous = d.id
+    ? (await supabase.from('ads').select('image_url, video_url').eq('id', d.id).maybeSingle())
+        .data
+    : null
 
   // Only the fields the chosen kind uses are written. Without this, switching
   // an ad from an image to a snippet would leave the old image URL behind and
@@ -126,8 +140,49 @@ export async function saveAd(_prev: CatalogState, formData: FormData): Promise<C
 
   if (error) return { error: error.message }
 
+  if (previous) {
+    if (previous.image_url && previous.image_url !== values.image_url) {
+      await removeAdFile(previous.image_url)
+    }
+    if (previous.video_url && previous.video_url !== values.video_url) {
+      await removeAdFile(previous.video_url)
+    }
+  }
+
   revalidateAdSurfaces()
   return { success: d.id ? 'Ad saved.' : 'Ad added.' }
+}
+
+/**
+ * Upload whichever creative files came with the form.
+ *
+ * Returns field errors rather than throwing, so a rejected file lands next to
+ * the input that produced it instead of as a banner at the top of the page.
+ */
+async function takeUploads(
+  formData: FormData,
+): Promise<
+  { imageUrl: string | null; videoUrl: string | null } | { error: Record<string, string[]> }
+> {
+  const image = formData.get('imageFile')
+  const video = formData.get('videoFile')
+
+  let imageUrl: string | null = null
+  let videoUrl: string | null = null
+
+  if (image instanceof File && image.size > 0) {
+    const result = await uploadAdFile(image, 'image')
+    if ('error' in result) return { error: { imageFile: [result.error] } }
+    imageUrl = result.url
+  }
+
+  if (video instanceof File && video.size > 0) {
+    const result = await uploadAdFile(video, 'video')
+    if ('error' in result) return { error: { videoFile: [result.error] } }
+    videoUrl = result.url
+  }
+
+  return { imageUrl, videoUrl }
 }
 
 export async function deleteAd(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
@@ -137,14 +192,27 @@ export async function deleteAd(_prev: CatalogState, formData: FormData): Promise
   if (!id) return { error: 'Missing ad.' }
 
   const supabase = await createClient()
+
+  const { data: doomed } = await supabase
+    .from('ads')
+    .select('image_url, video_url')
+    .eq('id', id)
+    .maybeSingle()
+
   const { error } = await supabase.from('ads').delete().eq('id', id)
   if (error) return { error: error.message }
+
+  // Only after the row is gone: a file removed first would leave a live ad
+  // pointing at nothing if the delete then failed.
+  await removeAdFile(doomed?.image_url)
+  await removeAdFile(doomed?.video_url)
 
   revalidateAdSurfaces()
   return { success: 'Ad deleted.' }
 }
 
 const settingsSchema = z.object({
+  homeBannerPosition: z.enum(['top', 'interval']),
   homeGridInterval: z.coerce
     .number()
     .int()
@@ -159,6 +227,7 @@ export async function saveAdSettings(
   await requireAdmin('/admin/ads')
 
   const parsed = settingsSchema.safeParse({
+    homeBannerPosition: formData.get('homeBannerPosition') || 'top',
     homeGridInterval: formData.get('homeGridInterval'),
   })
 
@@ -169,13 +238,16 @@ export async function saveAdSettings(
   const supabase = await createClient()
   const { error } = await supabase
     .from('ad_settings')
-    .update({ home_grid_interval: parsed.data.homeGridInterval })
+    .update({
+      home_banner_position: parsed.data.homeBannerPosition,
+      home_grid_interval: parsed.data.homeGridInterval,
+    })
     .eq('id', true)
 
   if (error) return { error: error.message }
 
   revalidateAdSurfaces()
-  return { success: 'Spacing saved.' }
+  return { success: 'Saved.' }
 }
 
 /** Every page an ad can appear on, so a change shows up without a rebuild. */

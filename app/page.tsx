@@ -10,7 +10,8 @@ import {
 import { VideoGrid } from '@/components/VideoCard'
 import { InfiniteVideoGrid } from '@/components/InfiniteVideoGrid'
 import { EntityAvatar } from '@/components/BrowseResults'
-import { listAdsFor, getHomeGridInterval } from '@/lib/ads/queries'
+import { listAdsFor, getHomeBannerSettings, pickAd } from '@/lib/ads/queries'
+import { AdBanner } from '@/components/ads/AdSlot'
 import { REGION_CONFIG, isRegion } from '@/lib/geo'
 import { COUNTRY_HEADER, REGION_HEADER } from '@/lib/constants'
 
@@ -30,7 +31,7 @@ export default async function HomePage() {
   const region = isRegion(regionHeader) ? regionHeader : 'INT'
   const regionConfig = REGION_CONFIG[region]
 
-  const [trending, latest, models, paysites, categories, gridAds, adInterval] =
+  const [trending, latest, models, paysites, categories, gridAds, banner] =
     await Promise.all([
       listVideos({ sort: 'views', perPage: 12, country }),
       listVideos({ sort: 'new', perPage: LATEST_PER_PAGE, country }),
@@ -38,8 +39,14 @@ export default async function HomePage() {
       getFeaturedPaysites(24),
       getCategories(),
       listAdsFor('home_grid'),
-      getHomeGridInterval(),
+      getHomeBannerSettings(),
     ])
+
+  // Ad networks sell the slot above the listings, and told us a banner in the
+  // middle of a grid is not a placement they recognise. So one banner at the
+  // top is the default, and repeating it down the page is opt-in.
+  const topBanner = banner.position === 'top' ? pickAd(gridAds, 'home-top') : null
+  const repeatAds = banner.position === 'interval' ? gridAds : []
 
   return (
     <div className="space-y-6">
@@ -102,6 +109,10 @@ export default async function HomePage() {
         </Rail>
       )}
 
+      {/* Below the category rail, above every listing — the position the
+          networks ask for. */}
+      {topBanner && <AdBanner ad={topBanner} />}
+
       <section>
         <SectionHeading
           title="Trending now"
@@ -128,8 +139,8 @@ export default async function HomePage() {
           perPage={LATEST_PER_PAGE}
           sort="new"
           emptyMessage="No videos yet."
-          ads={gridAds}
-          adInterval={adInterval}
+          ads={repeatAds}
+          adInterval={banner.interval}
         />
       </section>
     </div>

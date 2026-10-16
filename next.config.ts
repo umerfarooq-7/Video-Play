@@ -39,6 +39,16 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: cdnPatterns(),
   },
+  experimental: {
+    serverActions: {
+      // Ad creatives are uploaded through a server action, and a pre-roll clip
+      // runs to several megabytes. The 1MB default rejects those before the
+      // action ever runs, with an error that says nothing about the size. A
+      // little over the bucket's own 25MB ceiling, because the limit counts
+      // the multipart boundaries and part headers as well as the file.
+      bodySizeLimit: '26mb',
+    },
+  },
 }
 
 export default nextConfig

@@ -84,7 +84,7 @@ export type Model = {
 }
 
 /** Where on the site an ad is shown. */
-export type AdPlacement = 'home_grid' | 'under_player' | 'preroll'
+export type AdPlacement = 'home_grid' | 'under_player' | 'sidebar' | 'preroll'
 /** What the ad is made of. See supabase/migrations/0011_ads.sql. */
 export type AdKind = 'image' | 'html' | 'video'
 
@@ -112,6 +112,8 @@ export type Ad = {
 export type AdSettings = {
   id: boolean
   home_grid_interval: number
+  /** 'top' shows one banner above the grids; 'interval' repeats it. */
+  home_banner_position: 'top' | 'interval'
   updated_at: string
 }
 

@@ -18,9 +18,73 @@ import {
 import type { Ad, AdKind, AdPlacement } from '@/types/database'
 
 const PLACEMENT_LABELS: Record<AdPlacement, string> = {
-  home_grid: 'Home page — between the videos',
+  home_grid: 'Home page — above the videos',
+  sidebar: 'Watch page — beside the video (300×250)',
   under_player: 'Watch page — under the video',
   preroll: 'Watch page — before the video plays',
+}
+
+/**
+ * A creative uploaded from the admin's own machine.
+ *
+ * The network sends the client a GIF or an MP4 in a chat window, and they have
+ * nowhere to host it — so the file goes straight into our own storage and the
+ * URL box below stays for creatives that already live on somebody's CDN.
+ */
+function FileField({
+  label,
+  name,
+  accept,
+  hint,
+  errors,
+}: {
+  label: string
+  name: string
+  accept: string
+  hint?: string
+  errors?: string[]
+}) {
+  const hasError = !!errors?.length
+
+  return (
+    <div>
+      <label htmlFor={name} className="block text-xs font-medium text-foreground">
+        {label}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type="file"
+        accept={accept}
+        className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-accent-contrast ${
+          hasError ? 'border-danger' : 'border-border'
+        }`}
+      />
+      {hint && !hasError && <p className="mt-1 text-xs text-muted">{hint}</p>}
+      {hasError && <p className="mt-1 text-xs text-danger">{errors[0]}</p>}
+    </div>
+  )
+}
+
+/** What is already set, so an edit does not look like it starts from nothing. */
+function CurrentCreative({ url, kind }: { url: string | null; kind: 'image' | 'video' }) {
+  if (!url) return null
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-background p-2">
+      {kind === 'image' ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-10 w-auto max-w-24 rounded object-contain" />
+      ) : (
+        <span className="rounded bg-surface-raised px-2 py-1 text-[10px] font-semibold uppercase">
+          Video
+        </span>
+      )}
+      <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
+        In use now. Choose a file or paste a link to replace it.
+      </p>
+    </div>
+  )
 }
 
 function Select({
@@ -132,14 +196,25 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
       )}
 
       {effectiveKind === 'image' && (
-        <Field
-          label="Image link"
-          name="imageUrl"
-          type="url"
-          defaultValue={ad?.image_url ?? ''}
-          placeholder="https://example.com/banner.jpg"
-          errors={fieldErrors?.imageUrl}
-        />
+        <>
+          <CurrentCreative url={ad?.image_url ?? null} kind="image" />
+          <FileField
+            label="Upload a banner"
+            name="imageFile"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            hint="JPG, PNG, GIF or WebP, up to 25 MB. Animated GIFs work."
+            errors={fieldErrors?.imageFile}
+          />
+          <Field
+            label="…or paste an image link"
+            name="imageUrl"
+            type="url"
+            defaultValue={ad?.image_url ?? ''}
+            placeholder="https://example.com/banner.gif"
+            hint="Only needed if the banner is already hosted somewhere."
+            errors={fieldErrors?.imageUrl}
+          />
+        </>
       )}
 
       {effectiveKind === 'html' && (
@@ -156,13 +231,21 @@ function AdFields({ ad, fieldErrors }: { ad?: Ad; fieldErrors?: Record<string, s
 
       {effectiveKind === 'video' && (
         <>
+          <CurrentCreative url={ad?.video_url ?? null} kind="video" />
+          <FileField
+            label="Upload the ad clip"
+            name="videoFile"
+            accept="video/mp4,video/webm"
+            hint="MP4 or WebM, up to 25 MB."
+            errors={fieldErrors?.videoFile}
+          />
           <Field
-            label="Video file link"
+            label="…or paste a video link"
             name="videoUrl"
             type="url"
             defaultValue={ad?.video_url ?? ''}
             placeholder="https://example.com/ad.mp4"
-            hint="A direct .mp4 link. The viewer presses play once and the ad runs first."
+            hint="Only needed if the clip is already hosted somewhere."
             errors={fieldErrors?.videoUrl}
           />
           <Field
@@ -327,15 +410,34 @@ export function AdRow({ ad }: { ad: Ad }) {
   )
 }
 
-export function AdSettingsForm({ interval }: { interval: number }) {
+export function AdSettingsForm({
+  interval,
+  position,
+}: {
+  interval: number
+  position: 'top' | 'interval'
+}) {
   const [state, formAction] = useActionState<CatalogState, FormData>(saveAdSettings, null)
+  const [choice, setChoice] = useState(position)
 
   return (
-    <form
-      action={formAction}
-      className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-4"
-    >
-      <div className="w-40">
+    <form action={formAction} className="space-y-3 rounded-xl border border-border bg-surface p-4">
+      <Select
+        label="Where the home page banner goes"
+        name="homeBannerPosition"
+        value={choice}
+        onChange={(value) => setChoice(value as 'top' | 'interval')}
+        options={[
+          { value: 'top', label: 'Once, above the videos (recommended)' },
+          { value: 'interval', label: 'Repeating, between the videos' },
+        ]}
+        hint="Ad networks sell the slot above the listings; a banner inside a grid is not a placement they recognise."
+        errors={state?.fieldErrors?.homeBannerPosition}
+      />
+
+      {/* Still submitted when the banner sits at the top, so switching back to
+          repeating does not lose the number that was set. */}
+      <div className={choice === 'interval' ? 'w-40' : 'hidden'}>
         <Field
           label="Videos between banners"
           name="homeGridInterval"
@@ -344,9 +446,12 @@ export function AdSettingsForm({ interval }: { interval: number }) {
           errors={state?.fieldErrors?.homeGridInterval}
         />
       </div>
-      <SubmitButton pendingLabel="Saving…">Save spacing</SubmitButton>
-      {state?.success && <p className="text-xs text-success">{state.success}</p>}
-      {state?.error && <p className="text-xs text-danger">{state.error}</p>}
+
+      <div className="flex items-center gap-3">
+        <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+        {state?.success && <p className="text-xs text-success">{state.success}</p>}
+        {state?.error && <p className="text-xs text-danger">{state.error}</p>}
+      </div>
     </form>
   )
 }

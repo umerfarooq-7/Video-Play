@@ -85,14 +85,24 @@ export function pickAd(ads: AdCreative[], seed: string): AdCreative | null {
   return ads[Math.abs(hash) % ads.length]
 }
 
-/** How many videos go between two home-page banners. */
-export async function getHomeGridInterval(): Promise<number> {
+export interface HomeBannerSettings {
+  /** 'top' puts one banner above the grids; 'interval' repeats it between them. */
+  position: 'top' | 'interval'
+  /** Videos between banners, when repeating. */
+  interval: number
+}
+
+/** How the home page shows its banners. */
+export async function getHomeBannerSettings(): Promise<HomeBannerSettings> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('ad_settings')
-    .select('home_grid_interval')
+    .select('home_grid_interval, home_banner_position')
     .limit(1)
     .maybeSingle()
 
-  return data?.home_grid_interval ?? 15
+  return {
+    position: data?.home_banner_position === 'interval' ? 'interval' : 'top',
+    interval: data?.home_grid_interval ?? 15,
+  }
 }

@@ -97,11 +97,12 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
   // RLS lets the owner and staff see unpublished rows so they can preview.
   if (!video) notFound()
 
-  const [user, headerList, prerolls, underPlayerAds] = await Promise.all([
+  const [user, headerList, prerolls, underPlayerAds, sidebarAds] = await Promise.all([
     getCurrentUser(),
     headers(),
     listAdsFor('preroll'),
     listAdsFor('under_player'),
+    listAdsFor('sidebar'),
   ])
   const country = headerList.get(COUNTRY_HEADER) || null
 
@@ -109,6 +110,7 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
   // library between them instead of the first one taking every impression.
   const preroll = pickAd(prerolls, video.id)
   const underPlayerAd = pickAd(underPlayerAds, `under:${video.id}`)
+  const sidebarAd = pickAd(sidebarAds, `side:${video.id}`)
 
   const isOwner = user?.id === video.owner_id
   const isPublished = video.status === 'published'
@@ -361,6 +363,10 @@ export default async function WatchPage({ params }: PageProps<'/watch/[slug]'>) 
       </div>
 
       <aside className="min-w-0">
+        {/* Above "Up next", level with the player on a wide screen. This is
+            the 300x250 slot ad networks sell for a video page. */}
+        {sidebarAd && <AdBanner ad={sidebarAd} className="mb-4" />}
+
         <h2 className="mb-3 text-sm font-semibold">Up next</h2>
         <div className="[&_.grid]:grid-cols-2 lg:[&_.grid]:grid-cols-1">
           <VideoGrid videos={related.filter((v) => v.id !== video.id).slice(0, 8)} emptyMessage="Nothing else published yet." />

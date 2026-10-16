@@ -10,7 +10,13 @@ const SECTIONS: { placement: AdPlacement; title: string; blurb: string }[] = [
     placement: 'home_grid',
     title: 'Home page banners',
     blurb:
-      'Shown on a row of their own between the videos, repeating down the page as the visitor scrolls. With more than one, they take turns.',
+      'Shown under the category row and above the video listings. Set them to repeat between the videos instead with the option above.',
+  },
+  {
+    placement: 'sidebar',
+    title: 'Beside the video',
+    blurb:
+      'In the "Up next" column on a watch page, level with the player. This is the 300×250 slot ad networks sell for a video page.',
   },
   {
     placement: 'under_player',
@@ -33,11 +39,16 @@ export default async function AdminAdsPage() {
   // this page is for. The public queries filter separately.
   const [{ data: ads }, { data: settings }] = await Promise.all([
     supabase.from('ads').select('*').order('placement').order('sort_order'),
-    supabase.from('ad_settings').select('home_grid_interval').limit(1).maybeSingle(),
+    supabase
+      .from('ad_settings')
+      .select('home_grid_interval, home_banner_position')
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const rows = (ads ?? []) as Ad[]
   const interval = settings?.home_grid_interval ?? 15
+  const position = settings?.home_banner_position === 'interval' ? 'interval' : 'top'
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -51,8 +62,8 @@ export default async function AdminAdsPage() {
       </div>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Home page spacing</h3>
-        <AdSettingsForm interval={interval} />
+        <h3 className="mb-2 text-sm font-semibold">Home page banner</h3>
+        <AdSettingsForm interval={interval} position={position} />
       </section>
 
       <section>
